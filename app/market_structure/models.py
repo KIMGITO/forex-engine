@@ -1,0 +1,195 @@
+"""Typed models for market-structure & liquidity analysis.
+
+Every event that depends on future information carries three timestamps:
+
+* ``timestamp`` — the bar the event refers to.
+* ``confirmation_timestamp`` — the bar at which the event becomes knowable.
+* ``available_from`` — the earliest a consumer may legally use the event
+  (always the later of the two; for causal events it equals ``timestamp``).
+
+This explicit separation is the foundation of the engine's look-ahead
+protection: a strategy may never act on an event before ``available_from``.
+"""
+
+from datetime import datetime
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SwingType(str, Enum):
+    HIGH = "high"
+    LOW = "low"
+
+
+class StructureType(str, Enum):
+    HIGHER_HIGH = "higher_high"
+    HIGHER_LOW = "higher_low"
+    LOWER_HIGH = "lower_high"
+    LOWER_LOW = "lower_low"
+
+
+class BreakType(str, Enum):
+    WICK_BREACH = "wick_breach"
+    CLOSE_BREAK = "close_break"
+    CONFIRMED_BREAK = "confirmed_break"
+
+
+class SweepType(str, Enum):
+    HIGH_SWEEP = "high_sweep"
+    LOW_SWEEP = "low_sweep"
+
+
+class DisplacementClass(str, Enum):
+    EXTREME = "extreme"
+    LARGE = "large"
+    NORMAL = "normal"
+    SMALL = "small"
+
+
+class Swing(BaseModel):
+    """A detected swing high or low."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    timestamp: datetime = Field(..., description="Bar the swing refers to")
+    swing_type: SwingType
+    price: float = Field(..., description="High (for swing high) or low (for swing low)")
+    confirmation_timestamp: datetime = Field(
+        ..., description="Bar at which the swing becomes knowable (timestamp + right window)"
+    )
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this swing"
+    )
+    left: int = Field(..., description="Lookback window used for detection")
+    right: int = Field(..., description="Lookforward window used for detection")
+
+
+class StructurePoint(BaseModel):
+    """A structural relationship between two consecutive confirmed swings."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    timestamp: datetime = Field(..., description="Timestamp of the newer swing")
+    structure_type: StructureType
+    price: float = Field(..., description="Price of the newer swing")
+    prior_price: float = Field(..., description="Price of the prior swing of the same type")
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this structure point"
+    )
+
+
+class BreakEvent(BaseModel):
+    """A structural break or breach of a significant level."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    timestamp: datetime = Field(..., description="Bar at which the event occurred")
+    break_type: BreakType
+    level: float = Field(..., description="The level that was breached/broken")
+    direction: str = Field(..., description="'up' or 'down'")
+    confirmation_timestamp: datetime | None = Field(
+        default=None, description="Bar at which a confirmed break becomes knowable"
+    )
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this break event"
+    )
+
+
+class LiquidityZone(BaseModel):
+    """A potential liquidity area derived from equal highs or equal lows.
+
+    This is a *potential* liquidity zone based on price structure alone. It is
+    NOT a claim about actual order-book liquidity or the location of stop
+    orders.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    zone_type: str = Field(..., description="'equal_highs' or 'equal_lows'")
+    upper: float = Field(..., description="Upper bound of the zone")
+    lower: float = Field(..., description="Lower bound of the zone")
+    mid: float = Field(..., description="Midpoint of the zone")
+    swing_count: int = Field(..., description="Number of swings grouped into the zone")
+    first_timestamp: datetime = Field(..., description="Timestamp of the first swing in the zone")
+    last_timestamp: datetime = Field(..., description="Timestamp of the last swing in the zone")
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this zone"
+    )
+
+
+class SweepEvent(BaseModel):
+    """A liquidity sweep: price trades through a prior level, then returns."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    timestamp: datetime = Field(..., description="Bar at which the sweep occurred")
+    sweep_type: SweepType
+    level: float = Field(..., description="The liquidity level that was swept")
+    extreme_price: float = Field(..., description="The extreme price reached during the sweep")
+    close_price: float = Field(..., description="The close that confirmed the return")
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this sweep"
+    )
+
+
+class DisplacementEvent(BaseModel):
+    """A per-bar displacement measurement relative to recent ATR."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    timestamp: datetime = Field(..., description="Bar the displacement refers to")
+    range_ratio: float = Field(..., description="Bar range / ATR(window)")
+    body_ratio: float = Field(..., description="Body / range (0..1)")
+    direction: str = Field(..., description="'up', 'down', or 'flat'")
+    classification: DisplacementClass
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this displacement"
+    )
+
+
+class RangeEvent(BaseModel):
+    """A consolidation/range period detected from compressed volatility."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    start_timestamp: datetime = Field(..., description="First bar of the range")
+    end_timestamp: datetime = Field(..., description="Last bar of the range")
+    upper: float = Field(..., description="Upper bound of the range")
+    lower: float = Field(..., description="Lower bound of the range")
+    compression_ratio: float = Field(
+        ..., description="ATR / SMA(ATR) over the range window (lower = more compressed)"
+    )
+    available_from: datetime = Field(
+        ..., description="Earliest a consumer may legally use this range event"
+    )
+
+
+class MarketStructureResult(BaseModel):
+    """Aggregate output of the market-structure engine."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: str
+    timeframe: str
+    swings: list[Swing] = Field(default_factory=list)
+    structure: list[StructurePoint] = Field(default_factory=list)
+    breaks: list[BreakEvent] = Field(default_factory=list)
+    liquidity_zones: list[LiquidityZone] = Field(default_factory=list)
+    sweeps: list[SweepEvent] = Field(default_factory=list)
+    displacement: list[DisplacementEvent] = Field(default_factory=list)
+    ranges: list[RangeEvent] = Field(default_factory=list)
