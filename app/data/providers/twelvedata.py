@@ -196,8 +196,27 @@ class LiveCandlePoller:
         return self.provider.fetch_candles(self.symbol, self.timeframe, start, now)
 
 
+def _normalize_timeframe(timeframe: str) -> str:
+    """Normalize a timeframe string to the adapter's canonical native key.
+
+    Accepts BOTH the lowercase native conventions used by the market-structure /
+    MTF / backtest layers (``15m``, ``1h``, ``4h``, ``1d``) AND the uppercase
+    research-layer conventions (``M15``, ``H1``, ``H4``, ``D1``). This is purely
+    additive: existing lowercase usage (tests, adapters, MTF engine) is unchanged.
+    """
+    s = timeframe.strip().lower().replace(" ", "")
+    # Uppercase research forms: M5/M15/H1/H2/H4/D1/W1/MN1.
+    mapping = {
+        "m1": "1m", "m5": "5m", "m15": "15m", "m30": "30m", "m45": "45m",
+        "h1": "1h", "h2": "2h", "h4": "4h",
+        "d1": "1d", "w1": "1w", "mn1": "1M",
+    }
+    mapped = mapping.get(s, s)
+    return mapped
+
+
 def _resolve_interval(timeframe: str) -> str:
-    interval = TWELVE_DATA_INTERVALS.get(timeframe.lower())
+    interval = TWELVE_DATA_INTERVALS.get(_normalize_timeframe(timeframe))
     if interval is None:
         raise UnavailableTimeframeError(
             f"Timeframe {timeframe!r} not supported by Twelve Data adapter. "

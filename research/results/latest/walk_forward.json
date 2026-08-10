@@ -1,0 +1,96 @@
+[
+  {
+    "index": 0,
+    "split": {
+      "train_start": "2026-07-10T13:00:00+00:00",
+      "train_end": "2026-07-28T13:00:00+00:00",
+      "validation_start": "2026-07-28T13:00:00+00:00",
+      "validation_end": "2026-08-02T13:00:00+00:00",
+      "test_start": "2026-08-02T13:00:00+00:00",
+      "test_end": "2026-08-07T13:00:00+00:00"
+    },
+    "validation": {
+      "trade_count": 1,
+      "net_pnl": -0.8459657092407724,
+      "total_return": -8.459657092407723e-05,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -0.8459657092410033,
+      "average_win": null,
+      "average_loss": -0.8459657092410033,
+      "max_drawdown": 8.459657092407723e-05,
+      "drawdown_duration_bars": 102,
+      "sharpe": -1.7649642860286507,
+      "sortino": -0.2777777175786501,
+      "exposure_fraction": 0.025,
+      "average_holding_bars": 3.0,
+      "insufficient_data": [
+        "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+      ]
+    },
+    "test": {
+      "trade_count": 5,
+      "net_pnl": -5.653431977401851,
+      "total_return": -0.0005653431977401852,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -1.1306863954799962,
+      "average_win": null,
+      "average_loss": -1.1306863954799962,
+      "max_drawdown": 0.0005653431977401852,
+      "drawdown_duration_bars": 96,
+      "sharpe": -2.244457730238394,
+      "sortino": -0.4030554201877786,
+      "exposure_fraction": 0.0,
+      "average_holding_bars": 0.0,
+      "insufficient_data": []
+    }
+  },
+  {
+    "index": 1,
+    "split": {
+      "train_start": "2026-07-15T13:00:00+00:00",
+      "train_end": "2026-08-02T13:00:00+00:00",
+      "validation_start": "2026-08-02T13:00:00+00:00",
+      "validation_end": "2026-08-07T13:00:00+00:00",
+      "test_start": "2026-08-07T13:00:00+00:00",
+      "test_end": "2026-08-10T12:00:00+00:00"
+    },
+    "validation": {
+      "trade_count": 5,
+      "net_pnl": -5.653431977401851,
+      "total_return": -0.0005653431977401852,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -1.1306863954799962,
+      "average_win": null,
+      "average_loss": -1.1306863954799962,
+      "max_drawdown": 0.0005653431977401852,
+      "drawdown_duration_bars": 95,
+      "sharpe": -2.244777791667668,
+      "sortino": -0.40474538743282545,
+      "exposure_fraction": 0.0,
+      "average_holding_bars": 0.0,
+      "insufficient_data": []
+    },
+    "test": {
+      "trade_count": 1,
+      "net_pnl": -0.3387662801960687,
+      "total_return": -3.387662801960687e-05,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -0.33876628019524624,
+      "average_win": null,
+      "average_loss": -0.33876628019524624,
+      "max_drawdown": 4.787595775614008e-05,
+      "drawdown_duration_bars": 26,
+      "sharpe": -0.6571502631633064,
+      "sortino": -0.11535949415522832,
+      "exposure_fraction": 0.1111111111111111,
+      "average_holding_bars": 8.0,
+      "insufficient_data": [
+        "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+      ]
+    }
+  }
+]

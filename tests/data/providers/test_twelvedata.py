@@ -13,6 +13,7 @@ from requests import Session
 from app.data.exceptions import MalformedResponseError, UnavailableTimeframeError
 from app.data.providers.twelvedata import (
     TwelveDataMarketDataProvider,
+    _normalize_timeframe,
     _to_twelve_symbol,
 )
 
@@ -71,6 +72,39 @@ class TestTwelveSymbolMapping:
 
     def test_with_dash(self):
         assert _to_twelve_symbol("EUR-USD") == "EUR/USD"
+
+
+class TestTimeframeNormalization:
+    """Research-layer uppercase forms resolve to native lowercase keys."""
+
+    def test_lowercase_passthrough(self):
+        assert _normalize_timeframe("1h") == "1h"
+        assert _normalize_timeframe("15m") == "15m"
+
+    def test_uppercase_research_forms(self):
+        assert _normalize_timeframe("M5") == "5m"
+        assert _normalize_timeframe("M15") == "15m"
+        assert _normalize_timeframe("H1") == "1h"
+        assert _normalize_timeframe("H4") == "4h"
+        assert _normalize_timeframe("D1") == "1d"
+
+    def test_backtest_and_mtf_lowercase_accepted(self):
+        assert _normalize_timeframe("4h") == "4h"
+        assert _normalize_timeframe("1d") == "1d"
+
+    def test_fetch_candles_accepts_uppercase_research_timeframe(self, monkeypatch):
+        # Regression: the research layer configures uppercase (H1/M15/H4/D1),
+        # which previously raised UnavailableTimeframeError. Now resolves.
+        _patch_http(monkeypatch, _ok_payload(5), 200)
+        provider = TwelveDataMarketDataProvider(api_key="fake")
+        candles = provider.fetch_candles("EURUSD", "H1", _ts(0), _ts(20))
+        assert len(candles) == 5
+
+    def test_fetch_candles_accepts_uppercase_d1(self, monkeypatch):
+        _patch_http(monkeypatch, _ok_payload(3), 200)
+        provider = TwelveDataMarketDataProvider(api_key="fake")
+        candles = provider.fetch_candles("EURUSD", "D1", _ts(0), _ts(10))
+        assert len(candles) == 3
 
 
 class TestTwelveDataProvider:

@@ -51,6 +51,13 @@ from app.market_structure.models import MarketStructureResult
 __all__ = ["BacktestContext", "EventBacktester", "NoOpStrategy", "Strategy"]
 
 
+def _normalize_backtest_ts(value) -> Any:
+    """Normalize a (possibly pandas) timestamp to a hashable UTC key."""
+    if hasattr(value, "to_pydatetime"):
+        return value.to_pydatetime()
+    return value
+
+
 class Strategy:
     """Abstract strategy interface.
 
@@ -96,6 +103,7 @@ class BacktestContext:
         regime_observations: list[Any] | None = None,
         portfolio: Portfolio | None = None,
         now: pd.Timestamp | None = None,
+        mtf: Any | None = None,
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
@@ -107,6 +115,7 @@ class BacktestContext:
         self._news_events = news_events
         self._regime_observations = regime_observations
         self._portfolio = portfolio
+        self._mtf = mtf
         self.now = now if now is not None else frame.index[current_index]
 
     # ── current state (only this bar) ────────────────────────────────────────
@@ -173,6 +182,13 @@ class BacktestContext:
 
     # ── portfolio (current values only) ──────────────────────────────────────
 
+    def mtf_context(self):
+        """Return the causal MTF context for this bar, or None when MTF is not
+        enabled/provided. The MTF context carries its own ``available_from``
+        invariant: a strategy may only ever act on MTF tiers whose candle was
+        fully completed before this bar."""
+        return self._mtf
+
     def equity(self, mid: float) -> float:
         assert self._portfolio is not None
         return self._portfolio.equity(mid)
@@ -201,6 +217,7 @@ class EventBacktester:
         market_structure: MarketStructureResult | None = None,
         news_events: list[Any] | None = None,
         regime_observations: list[Any] | None = None,
+        mtf_contexts: list | None = None,
         provider: str = "unknown",
         source_type: str = "historical",
     ) -> BacktestResult:
@@ -209,6 +226,12 @@ class EventBacktester:
         Parameters are intentionally typed as the causal inputs the engine
         accepts; the strategy can only ever view slices capped at the current
         bar via BacktestContext.
+
+        ``mtf_contexts`` (optional) provides one MtfContext per bar (ordered
+        same as the frame index). When provided, each per-bar BacktestContext
+        exposes ``mtf_context()`` with only the MTF tiers whose ``available_from``
+        is at or before that bar. When omitted, the engine behaves exactly as
+        before (no MTF wiring) — fully backward compatible.
         """
         if frame.empty or "close" not in frame.columns:
             raise ValueError("frame must be a non-empty OHLC DataFrame")
@@ -264,6 +287,13 @@ class EventBacktester:
         portfolio_states: list = []
         all_orders: list[Order] = []
 
+        # Map MTF contexts by observation timestamp for causal per-bar lookup.
+        mtf_by_ts = None
+        if mtf_contexts is not None:
+            mtf_by_ts = {
+                _normalize_backtest_ts(mtf.timestamp): mtf for mtf in mtf_contexts
+            }
+
         for i, ts in clock:
             bar = sorted_frame.iloc[i]
             mid = float(bar["close"])
@@ -280,6 +310,11 @@ class EventBacktester:
                 regime_observations=regime_observations,
                 portfolio=portfolio,
                 now=ts,
+                mtf=(
+                    mtf_by_ts.get(_normalize_backtest_ts(ts))
+                    if mtf_by_ts is not None
+                    else None
+                ),
             )
 
             # 1. Strategy decisions (causal context only).
@@ -456,7 +491,10 @@ class EventBacktester:
             if std > 0:
                 sharpe = mean_r / std * (len(returns) ** 0.5)
             downside = [r for r in returns if r < 0]
-            if downside:
+            if downside and len(downside) >= 2:
+                # Sample variance requires >= 2 observations; with a single
+                # downside return (or none) Sortino is reported as None
+                # (insufficient data), never via a division by zero.
                 dvari = sum(r * r for r in downside) / (len(downside) - 1)
                 dstd = dvari ** 0.5
                 if dstd > 0:

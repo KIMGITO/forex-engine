@@ -1,0 +1,32 @@
+======================================================================
+FOREX RESEARCH REPORT
+======================================================================
+Provider: twelvedata
+Symbols: EURUSD, GBPUSD
+Timeframes: M15, H1
+Strategies: trend_structure,liquidity_reversal
+
+DATA:
+  EURUSD|H1: rows=744 2026-07-10T13:00:00+00:00 -> 2026-08-10T12:00:00+00:00 gaps=0 PASS
+  EURUSD|M15: rows=900 2026-08-01T04:45:00+00:00 -> 2026-08-10T13:30:00+00:00 gaps=0 PASS
+  GBPUSD|H1: rows=744 2026-07-10T13:00:00+00:00 -> 2026-08-10T12:00:00+00:00 gaps=0 PASS
+  GBPUSD|M15: rows=900 2026-08-01T04:45:00+00:00 -> 2026-08-10T13:30:00+00:00 gaps=0 PASS
+
+EXECUTION: SIMULATED BID/ASK (no historical bid/ask)
+COST MODEL: ASSUMPTION (spread/slippage/commission)
+
+TRAIN / VALIDATION / TEST:
+  TRAIN: trades_mean=9.0 net_pnl_mean=-10.66233169620682 expectancy_mean=-1.1847035218008648
+  VALIDATION: trades_mean=2.0 net_pnl_mean=-2.022916556261407 expectancy_mean=-1.0114582781305392
+  TEST (OOS): trades_mean=5.0 net_pnl_mean=-4.815247410577285 expectancy_mean=-0.9630494821150304
+
+WARNINGS:
+  - Twelve Data supplies OHLC only (no historical bid/ask).
+  - Free-tier per-request depth (~800 rows) constrains the historical window.
+
+LIMITATIONS:
+  - Twelve Data free-tier plan serves only ~1 trailing month per symbol/timeframe (verified: requesting 2015/recent returns data only from ~2026-07-07); dataset is INSUFFICIENT for multi-year robustness validation.
+  - No historical bid/ask; all costs are SIMULATED ASSUMPTIONS.
+
+CONCLUSION: INSUFFICIENT DATA — see limitations.
+======================================================================

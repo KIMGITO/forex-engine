@@ -1,0 +1,19 @@
+{
+  "EURUSD|H1": {
+    "symbol": "EURUSD",
+    "timeframe": "H1",
+    "first_timestamp": "2026-07-31T12:23:02.772990+00:00",
+    "last_timestamp": "2026-08-10T12:23:02.772990+00:00",
+    "candle_count": 241,
+    "expected_interval": 60,
+    "gap_count": 0,
+    "duplicate_count": 0,
+    "invalid_ohlc_count": 0,
+    "timezone_status": "ok",
+    "provider": "twelvedata",
+    "native_or_aggregated": "native",
+    "passed": true,
+    "errors": [],
+    "warnings": []
+  }
+}

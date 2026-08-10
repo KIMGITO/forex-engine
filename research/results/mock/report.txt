@@ -1,0 +1,29 @@
+======================================================================
+FOREX RESEARCH REPORT
+======================================================================
+Provider: twelvedata
+Symbols: EURUSD
+Timeframes: H1
+Strategies: trend_structure
+
+DATA:
+  EURUSD|H1: rows=241 2026-07-31T12:23:02.772990+00:00 -> 2026-08-10T12:23:02.772990+00:00 gaps=0 PASS
+
+EXECUTION: SIMULATED BID/ASK (no historical bid/ask)
+COST MODEL: ASSUMPTION (spread/slippage/commission)
+
+TRAIN / VALIDATION / TEST:
+  TRAIN: trades_mean=0.0 net_pnl_mean=0.0 expectancy_mean=None
+  VALIDATION: trades_mean=0.0 net_pnl_mean=0.0 expectancy_mean=None
+  TEST (OOS): trades_mean=0.0 net_pnl_mean=0.0 expectancy_mean=None
+
+WARNINGS:
+  - Twelve Data supplies OHLC only (no historical bid/ask).
+  - Free-tier per-request depth (~800 rows) constrains the historical window.
+
+LIMITATIONS:
+  - Twelve Data free-tier depth limits the historical range to the configured fetch window.
+  - Spread/slippage/commission are documented ASSUMPTIONS, not historical bid/ask.
+
+CONCLUSION: INSUFFICIENT DATA — see limitations.
+======================================================================

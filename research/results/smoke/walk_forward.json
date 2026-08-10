@@ -1,0 +1,100 @@
+[
+  {
+    "index": 0,
+    "split": {
+      "train_start": "2026-07-10T13:00:00+00:00",
+      "train_end": "2026-07-28T13:00:00+00:00",
+      "validation_start": "2026-07-28T13:00:00+00:00",
+      "validation_end": "2026-08-02T13:00:00+00:00",
+      "test_start": "2026-08-02T13:00:00+00:00",
+      "test_end": "2026-08-07T13:00:00+00:00"
+    },
+    "validation": {
+      "trade_count": 0,
+      "net_pnl": 0.0,
+      "total_return": 0.0,
+      "win_rate": null,
+      "profit_factor": null,
+      "expectancy": null,
+      "average_win": null,
+      "average_loss": null,
+      "max_drawdown": 0.0,
+      "drawdown_duration_bars": 0,
+      "sharpe": null,
+      "sortino": null,
+      "exposure_fraction": 0.0,
+      "average_holding_bars": null,
+      "insufficient_data": [
+        "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+      ]
+    },
+    "test": {
+      "trade_count": 0,
+      "net_pnl": 0.0,
+      "total_return": 0.0,
+      "win_rate": null,
+      "profit_factor": null,
+      "expectancy": null,
+      "average_win": null,
+      "average_loss": null,
+      "max_drawdown": 0.0,
+      "drawdown_duration_bars": 0,
+      "sharpe": null,
+      "sortino": null,
+      "exposure_fraction": 0.0,
+      "average_holding_bars": null,
+      "insufficient_data": [
+        "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+      ]
+    }
+  },
+  {
+    "index": 1,
+    "split": {
+      "train_start": "2026-07-15T13:00:00+00:00",
+      "train_end": "2026-08-02T13:00:00+00:00",
+      "validation_start": "2026-08-02T13:00:00+00:00",
+      "validation_end": "2026-08-07T13:00:00+00:00",
+      "test_start": "2026-08-07T13:00:00+00:00",
+      "test_end": "2026-08-10T12:00:00+00:00"
+    },
+    "validation": {
+      "trade_count": 0,
+      "net_pnl": 0.0,
+      "total_return": 0.0,
+      "win_rate": null,
+      "profit_factor": null,
+      "expectancy": null,
+      "average_win": null,
+      "average_loss": null,
+      "max_drawdown": 0.0,
+      "drawdown_duration_bars": 0,
+      "sharpe": null,
+      "sortino": null,
+      "exposure_fraction": 0.0,
+      "average_holding_bars": null,
+      "insufficient_data": [
+        "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+      ]
+    },
+    "test": {
+      "trade_count": 0,
+      "net_pnl": 0.0,
+      "total_return": 0.0,
+      "win_rate": null,
+      "profit_factor": null,
+      "expectancy": null,
+      "average_win": null,
+      "average_loss": null,
+      "max_drawdown": 0.0,
+      "drawdown_duration_bars": 0,
+      "sharpe": null,
+      "sortino": null,
+      "exposure_fraction": 0.0,
+      "average_holding_bars": null,
+      "insufficient_data": [
+        "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+      ]
+    }
+  }
+]

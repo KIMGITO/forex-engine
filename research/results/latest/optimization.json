@@ -1,0 +1,102 @@
+[
+  {
+    "params": {
+      "regime_strength": 0.4,
+      "reward_risk": 1.5
+    },
+    "score": -Infinity,
+    "metrics": {
+      "trade_count": 9,
+      "net_pnl": -10.66233169620682,
+      "total_return": -0.001066233169620682,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -1.1847035218008648,
+      "average_win": null,
+      "average_loss": -1.1847035218008648,
+      "max_drawdown": 0.001066233169620682,
+      "drawdown_duration_bars": 398,
+      "sharpe": -2.659859207176345,
+      "sortino": -0.3757124586409003,
+      "exposure_fraction": 0.002242152466367713,
+      "average_holding_bars": 0.1111111111111111,
+      "insufficient_data": []
+    },
+    "trade_count": 9
+  },
+  {
+    "params": {
+      "regime_strength": 0.4,
+      "reward_risk": 2.5
+    },
+    "score": -Infinity,
+    "metrics": {
+      "trade_count": 9,
+      "net_pnl": -10.66233169620682,
+      "total_return": -0.001066233169620682,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -1.1847035218008648,
+      "average_win": null,
+      "average_loss": -1.1847035218008648,
+      "max_drawdown": 0.001066233169620682,
+      "drawdown_duration_bars": 398,
+      "sharpe": -2.659859207176345,
+      "sortino": -0.3757124586409003,
+      "exposure_fraction": 0.002242152466367713,
+      "average_holding_bars": 0.1111111111111111,
+      "insufficient_data": []
+    },
+    "trade_count": 9
+  },
+  {
+    "params": {
+      "regime_strength": 0.6,
+      "reward_risk": 1.5
+    },
+    "score": -Infinity,
+    "metrics": {
+      "trade_count": 9,
+      "net_pnl": -10.66233169620682,
+      "total_return": -0.001066233169620682,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -1.1847035218008648,
+      "average_win": null,
+      "average_loss": -1.1847035218008648,
+      "max_drawdown": 0.001066233169620682,
+      "drawdown_duration_bars": 398,
+      "sharpe": -2.659859207176345,
+      "sortino": -0.3757124586409003,
+      "exposure_fraction": 0.002242152466367713,
+      "average_holding_bars": 0.1111111111111111,
+      "insufficient_data": []
+    },
+    "trade_count": 9
+  },
+  {
+    "params": {
+      "regime_strength": 0.6,
+      "reward_risk": 2.5
+    },
+    "score": -Infinity,
+    "metrics": {
+      "trade_count": 9,
+      "net_pnl": -10.66233169620682,
+      "total_return": -0.001066233169620682,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "expectancy": -1.1847035218008648,
+      "average_win": null,
+      "average_loss": -1.1847035218008648,
+      "max_drawdown": 0.001066233169620682,
+      "drawdown_duration_bars": 398,
+      "sharpe": -2.659859207176345,
+      "sortino": -0.3757124586409003,
+      "exposure_fraction": 0.002242152466367713,
+      "average_holding_bars": 0.1111111111111111,
+      "insufficient_data": []
+    },
+    "trade_count": 9
+  }
+]

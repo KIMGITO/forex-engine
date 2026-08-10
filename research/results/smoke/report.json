@@ -1,0 +1,205 @@
+{
+  "provider": "twelvedata",
+  "symbols": [
+    "EURUSD"
+  ],
+  "timeframes": [
+    "H1"
+  ],
+  "strategy": "trend_structure",
+  "config_dump": {
+    "provider": "twelvedata",
+    "symbols": [
+      "EURUSD"
+    ],
+    "timeframes": [
+      "H1"
+    ],
+    "storage_root": "data/processed",
+    "train_start": null,
+    "train_end": null,
+    "validation_start": null,
+    "validation_end": null,
+    "test_start": null,
+    "test_end": null,
+    "train_fraction": 0.6,
+    "validation_fraction": 0.2,
+    "walk_train_years": 2.0,
+    "walk_validation_years": 0.5,
+    "walk_test_years": 0.5,
+    "selection_metric": "expectancy",
+    "min_trades": 10,
+    "spread_pips": 0.8,
+    "slippage_pips": 0.0,
+    "commission_per_trade": 0.0,
+    "commission_percent": 0.0,
+    "warn_min_trades": 30,
+    "warn_min_bars": 500
+  },
+  "date_range": {
+    "EURUSD": {
+      "start": "2026-07-10 13:00:00+00:00",
+      "end": "2026-08-10 12:00:00+00:00",
+      "rows": 744
+    }
+  },
+  "training": {
+    "label": "IN-SAMPLE (TRAIN)",
+    "periods_evaluated": 1,
+    "aggregate": {
+      "drawdown_duration_bars_mean": 0.0,
+      "drawdown_duration_bars_std": 0.0,
+      "exposure_fraction_mean": 0.0,
+      "exposure_fraction_std": 0.0,
+      "max_drawdown_mean": 0.0,
+      "max_drawdown_std": 0.0,
+      "net_pnl_mean": 0.0,
+      "net_pnl_std": 0.0,
+      "total_return_mean": 0.0,
+      "total_return_std": 0.0,
+      "trade_count_mean": 0.0,
+      "trade_count_std": 0.0
+    },
+    "per_period": [
+      {
+        "trade_count": 0,
+        "net_pnl": 0.0,
+        "total_return": 0.0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy": null,
+        "average_win": null,
+        "average_loss": null,
+        "max_drawdown": 0.0,
+        "drawdown_duration_bars": 0,
+        "sharpe": null,
+        "sortino": null,
+        "exposure_fraction": 0.0,
+        "average_holding_bars": null,
+        "insufficient_data": [
+          "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "label": "VALIDATION",
+    "periods_evaluated": 1,
+    "aggregate": {
+      "drawdown_duration_bars_mean": 0.0,
+      "drawdown_duration_bars_std": 0.0,
+      "exposure_fraction_mean": 0.0,
+      "exposure_fraction_std": 0.0,
+      "max_drawdown_mean": 0.0,
+      "max_drawdown_std": 0.0,
+      "net_pnl_mean": 0.0,
+      "net_pnl_std": 0.0,
+      "total_return_mean": 0.0,
+      "total_return_std": 0.0,
+      "trade_count_mean": 0.0,
+      "trade_count_std": 0.0
+    },
+    "per_period": [
+      {
+        "trade_count": 0,
+        "net_pnl": 0.0,
+        "total_return": 0.0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy": null,
+        "average_win": null,
+        "average_loss": null,
+        "max_drawdown": 0.0,
+        "drawdown_duration_bars": 0,
+        "sharpe": null,
+        "sortino": null,
+        "exposure_fraction": 0.0,
+        "average_holding_bars": null,
+        "insufficient_data": [
+          "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+        ]
+      }
+    ]
+  },
+  "out_of_sample": {
+    "label": "OUT-OF-SAMPLE (TEST)",
+    "periods_evaluated": 1,
+    "aggregate": {
+      "drawdown_duration_bars_mean": 0.0,
+      "drawdown_duration_bars_std": 0.0,
+      "exposure_fraction_mean": 0.0,
+      "exposure_fraction_std": 0.0,
+      "max_drawdown_mean": 0.0,
+      "max_drawdown_std": 0.0,
+      "net_pnl_mean": 0.0,
+      "net_pnl_std": 0.0,
+      "total_return_mean": 0.0,
+      "total_return_std": 0.0,
+      "trade_count_mean": 0.0,
+      "trade_count_std": 0.0
+    },
+    "per_period": [
+      {
+        "trade_count": 0,
+        "net_pnl": 0.0,
+        "total_return": 0.0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy": null,
+        "average_win": null,
+        "average_loss": null,
+        "max_drawdown": 0.0,
+        "drawdown_duration_bars": 0,
+        "sharpe": null,
+        "sortino": null,
+        "exposure_fraction": 0.0,
+        "average_holding_bars": null,
+        "insufficient_data": [
+          "fewer than 2 trades: win/loss rates, profit factor, expectancy are unreliable"
+        ]
+      }
+    ]
+  },
+  "cross_symbol": {
+    "symbols_tested": 1,
+    "expectancy_mean": 0.0,
+    "expectancy_std": 0.0,
+    "positive_fraction": 0.0,
+    "per_symbol": [
+      {
+        "symbol": "EURUSD",
+        "expectancy": 0.0,
+        "trades": 0
+      }
+    ]
+  },
+  "cross_window": {
+    "index_mean": 0.5,
+    "index_std": 0.7071067811865476
+  },
+  "cost_assumptions": {
+    "data": "Twelve Data OHLC",
+    "execution": "SIMULATED BID/ASK",
+    "cost_model": "ASSUMPTION",
+    "baseline": {
+      "spread_pips": 0.8,
+      "slippage_pips": 0.0,
+      "commission_percent": 0.0,
+      "commission_per_trade": 0.0
+    },
+    "conservative": {
+      "spread_pips": 1.5,
+      "slippage_pips": 0.5,
+      "commission_percent": 0.0005,
+      "commission_per_trade": 0.0
+    }
+  },
+  "warnings": [
+    "Twelve Data supplies OHLC only (no historical bid/ask).",
+    "Free-tier per-request depth (~800 rows) constrains the historical window."
+  ],
+  "limitations": [
+    "Twelve Data free-tier plan serves only ~1 trailing month per symbol/timeframe (verified: requesting 2015/recent returns data only from ~2026-07-07); dataset is INSUFFICIENT for multi-year robustness validation.",
+    "No historical bid/ask; all costs are SIMULATED ASSUMPTIONS."
+  ]
+}
