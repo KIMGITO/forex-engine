@@ -16,3 +16,8 @@ data/processed/*
 
 *.log
 .DS_Store
+# Historical raw data (never commit) + metadata
+data/raw/**
+data/metadata/**
+data/research/**
+research/results/**
