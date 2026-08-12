@@ -30,8 +30,8 @@ class InstrumentSpec:
     ----------
     symbol : str
         Normalised 6-letter FX symbol (e.g. "EURUSD").
-    pip_size : float | None
-        Price distance of one pip. When ``None``, inferred via
+    pip_size : float
+        Price distance of one pip. When ``0.0``, inferred via
         :func:`pip_size_for_symbol` (JPY→0.01, else 0.0001). Explicit override
         is supported for exotic quote conventions.
     quote_to_account : float
@@ -49,7 +49,7 @@ class InstrumentSpec:
     """
 
     symbol: str
-    pip_size: float | None = None
+    pip_size: float = 0.0  # 0.0 = auto-infer; negative values are invalid
     quote_to_account: float = 1.0
     lot_size: float = 100_000.0
     min_lot: float = 0.01
@@ -59,11 +59,13 @@ class InstrumentSpec:
         sym = self.symbol.upper().replace("/", "").replace("_", "")
         if len(sym) != 6:
             raise RiskError(f"Invalid FX symbol: {self.symbol!r}")
+        if self.pip_size < 0:
+            raise RiskError("pip_size cannot be negative")
         object.__setattr__(self, "symbol", sym)
         object.__setattr__(
             self,
             "pip_size",
-            self.pip_size if self.pip_size is not None else pip_size_for_symbol(sym),
+            self.pip_size if self.pip_size > 0 else pip_size_for_symbol(sym),
         )
         if self.pip_size <= 0:
             raise RiskError("pip_size must be > 0")
@@ -166,7 +168,7 @@ def position_size_for_risk(
         raise RiskError("entry_price and stop_loss must be > 0")
     if entry_price == stop_loss:
         raise RiskError("zero stop distance: entry price equals stop loss")
-    if spec.pip_size is None or spec.pip_size <= 0:
+    if spec.pip_size <= 0:
         raise RiskError("invalid instrument spec: pip_size must be > 0")
     if spec.quote_to_account <= 0:
         raise RiskError("invalid instrument spec: quote_to_account must be > 0")

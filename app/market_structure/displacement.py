@@ -86,7 +86,6 @@ def compute_displacement(
     atr_vals = a.sort_index().to_numpy(dtype=float)
 
     events: list[DisplacementEvent] = []
-    prev_ratios: list[float] = []
 
     # Order-statistic Fenwick tree so percentile classification is O(log V)
     # per bar instead of O(n) per bar (np.nanpercentile on the whole history).
@@ -159,7 +158,7 @@ class _FenwickPercentiles:
     ``lo`` clamp to the first bin; values above ``hi`` clamp to the last bin.
     """
 
-    __slots__ = ("lo", "width", "n", "tree", "total")
+    __slots__ = ("lo", "n", "total", "tree", "width")
 
     def __init__(self, lo: float, hi: float, bins: int) -> None:
         self.lo = lo
@@ -208,8 +207,7 @@ class _FenwickPercentiles:
                 target -= self.tree[nxt]
             bit >>= 1
         idx += 1
-        if idx > self.n:
-            idx = self.n
+        idx = min(idx, self.n)
         return self.lo + (idx - 1) * self.width
 
 

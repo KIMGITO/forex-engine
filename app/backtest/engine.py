@@ -24,6 +24,7 @@ from typing import Any
 
 import pandas as pd
 
+from app._causal_index import available_prefix, build_causal_index
 from app.backtest.clock import BacktestClock
 from app.backtest.config import BacktestConfig
 from app.backtest.costs import (
@@ -47,7 +48,6 @@ from app.backtest.models import (
 from app.backtest.orders import fill_order, intent_to_order
 from app.backtest.portfolio import Portfolio
 from app.market_structure.models import MarketStructureResult
-from app._causal_index import available_prefix, build_causal_index
 
 __all__ = ["BacktestContext", "EventBacktester", "NoOpStrategy", "Strategy"]
 

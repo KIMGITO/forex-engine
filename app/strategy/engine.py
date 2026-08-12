@@ -11,12 +11,12 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from app._causal_index import build_causal_index
 from app.features import FeatureEngine
 from app.market_structure.engine import MarketStructureEngine
 from app.market_structure.models import MarketStructureResult
 from app.regime import RegimeConfig, RegimeEngine
 from app.regime.models import MarketRegime
-from app._causal_index import build_causal_index
 from app.strategy.base import Strategy
 from app.strategy.config import StrategyConfig
 from app.strategy.context import StrategyContext

@@ -2,10 +2,10 @@
 
 import pytest
 
+from app.risk import AccountState, RiskConfig, RiskEngine
 from app.risk.errors import RiskError
 from app.risk.instrument import InstrumentSpec, position_size_for_risk
 from app.risk.models import PositionSide, ProposedTrade
-from app.risk import RiskConfig, RiskEngine, AccountState
 
 
 def _spec(symbol: str = "EURUSD", **kw) -> InstrumentSpec:
@@ -32,9 +32,13 @@ class TestPipConventions:
         with pytest.raises(RiskError):
             InstrumentSpec(symbol="EURO")
 
-    def test_invalid_zero_pip_rejected(self):
+    def test_zero_pip_auto_infers(self):
+        # 0.0 is the auto-infer sentinel, not an error.
+        assert InstrumentSpec(symbol="EURUSD", pip_size=0.0).pip_size == 0.0001
+
+    def test_negative_pip_rejected(self):
         with pytest.raises(RiskError):
-            InstrumentSpec(symbol="EURUSD", pip_size=0.0)
+            InstrumentSpec(symbol="EURUSD", pip_size=-0.0001)
 
     def test_invalid_quote_conversion_rejected(self):
         with pytest.raises(RiskError):

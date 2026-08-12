@@ -10,9 +10,9 @@ from typing import Any
 
 import pandas as pd
 
+from app._causal_index import available_prefix, build_causal_index
 from app.market_structure.models import MarketStructureResult
 from app.regime.models import MarketRegime
-from app._causal_index import available_prefix, build_causal_index
 from app.strategy.config import StrategyConfig
 
 

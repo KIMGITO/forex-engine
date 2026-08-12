@@ -7,7 +7,8 @@ O(n) per-bar scans into O(log n) boundary + O(k) prefix.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 
 def build_causal_index(

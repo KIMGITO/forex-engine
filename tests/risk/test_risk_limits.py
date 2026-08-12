@@ -24,14 +24,14 @@ def _engine(**cfg_kw) -> RiskEngine:
 
 
 def _trade(**kw):
-    base = dict(
-        symbol="EURUSD",
-        side=PositionSide.BUY,
-        entry_price=1.1000,
-        stop_loss=1.0950,
-        take_profit=1.1100,
-        signal_id="sig-1",
-    )
+    base = {
+        "symbol": "EURUSD",
+        "side": PositionSide.BUY,
+        "entry_price": 1.1000,
+        "stop_loss": 1.0950,
+        "take_profit": 1.1100,
+        "signal_id": "sig-1",
+    }
     base.update(kw)
     return ProposedTrade(**base)
 
@@ -190,7 +190,7 @@ class TestInstrumentValidation:
 class TestTradeValidation:
     def test_missing_stop_loss_rejected_by_model(self):
         # Pydantic requires stop_loss > 0; a missing stop cannot be constructed.
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             ProposedTrade(
                 symbol="EURUSD", side=PositionSide.BUY,
                 entry_price=1.1, stop_loss=None,

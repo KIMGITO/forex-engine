@@ -67,7 +67,7 @@ class PositionSide(str, Enum):
     SELL = "sell"
 
     @classmethod
-    def from_order_side(cls, side: OrderSide) -> "PositionSide":
+    def from_order_side(cls, side: OrderSide) -> PositionSide:
         return cls.BUY if side == OrderSide.BUY else cls.SELL
 
 
@@ -88,7 +88,7 @@ class ExposureGroup(str, Enum):
     UNKNOWN = "unknown"
 
     @classmethod
-    def from_symbol(cls, symbol: str) -> "ExposureGroup":
+    def from_symbol(cls, symbol: str) -> ExposureGroup:
         """Derive the exposure group for a 6-letter FX symbol.
 
         Only the six configured pairs are recognised; anything else maps to
@@ -98,7 +98,7 @@ class ExposureGroup(str, Enum):
         s = symbol.upper().replace("/", "").replace("_", "")
         if len(s) != 6:
             return cls.UNKNOWN
-        base, quote = s[:3], s[3:]
+        quote = s[3:]
         if quote == "JPY":
             return cls.USD_BASE_JPY
         if quote == "CHF":
