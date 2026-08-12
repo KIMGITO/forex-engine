@@ -13,7 +13,10 @@ import pandas as pd
 
 from app.features import FeatureEngine
 from app.market_structure.engine import MarketStructureEngine
+from app.market_structure.models import MarketStructureResult
 from app.regime import RegimeConfig, RegimeEngine
+from app.regime.models import MarketRegime
+from app._causal_index import build_causal_index
 from app.strategy.base import Strategy
 from app.strategy.config import StrategyConfig
 from app.strategy.context import StrategyContext
@@ -85,6 +88,8 @@ class HistoricalSignalScanner:
         features: pd.DataFrame | None = None,
         news_events: list | None = None,
         mtf_contexts: list | None = None,
+        structure: MarketStructureResult | None = None,
+        regimes: list[MarketRegime] | None = None,
     ) -> SignalScanResult:
         """Process bars sequentially, collecting signals.
 
@@ -95,6 +100,14 @@ class HistoricalSignalScanner:
         same as the frame index). When provided, each emitted Signal's
         metadata is enriched with MTF evidence. When omitted, the scanner
         behaves exactly as before (no MTF wiring).
+
+        ``structure`` / ``regimes`` (optional) accept a precomputed
+        :class:`MarketStructureResult` and ``list[MarketRegime]``. When
+        provided, the scanner reuses them (the cache-friendly path) instead of
+        recomputing them internally. When omitted, they are computed as before
+        — behavior is byte-identical to prior versions. Cached artifacts are
+        only ever produced by the same causal engines, so causality is
+        preserved.
         """
         sorted_data = data.sort_index()
         mtf_by_ts = None
@@ -113,12 +126,30 @@ class HistoricalSignalScanner:
             )
 
         # Market structure (available_from filters applied per-bar by context).
-        structure = MarketStructureEngine().analyze(sorted_data, symbol, timeframe)
+        # Reuse a provided cached artifact when available; otherwise compute.
+        if structure is None:
+            structure = MarketStructureEngine().analyze(sorted_data, symbol, timeframe)
 
         # Regime observations (available_from = bar timestamp).
-        regimes = RegimeEngine(self.regime_config).analyze(
-            sorted_data, symbol, timeframe, market_structure=structure
-        )
+        # Reuse a provided cached artifact when available; otherwise compute.
+        if regimes is None:
+            regimes = RegimeEngine(self.regime_config).analyze(
+                sorted_data, symbol, timeframe, market_structure=structure
+            )
+
+        # Build the causal index once and share it with every per-bar context,
+        # so we avoid re-sorting the structure/regime/news lists per bar
+        # (would make a full scan O(n² log n)).
+        causal_bundle = {
+            "structure": build_causal_index(structure.structure if structure else []),
+            "liquidity": build_causal_index(structure.liquidity_zones if structure else []),
+            "sweeps": build_causal_index(structure.sweeps if structure else []),
+            "displacement": build_causal_index(structure.displacement if structure else []),
+            "breaks": build_causal_index(structure.breaks if structure else []),
+            "ranges": build_causal_index(structure.ranges if structure else []),
+            "regime": build_causal_index(regimes or []),
+            "news": build_causal_index(news_events or []),
+        }
 
         signals: list[Signal] = []
         for i, ts in enumerate(sorted_data.index):
@@ -135,6 +166,7 @@ class HistoricalSignalScanner:
                 regime_observations=regimes,
                 config=strategy.config,
                 mtf=mtf_ctx,
+                _causal_bundle=causal_bundle,
             )
             signal = strategy.evaluate(ctx)
             if signal is not None:

@@ -146,23 +146,52 @@ def detect_breaks(
 
     # Build a per-bar map of the most recent confirmed swing high/low level.
     # A swing is "active" from its confirmation bar onward.
-    swing_high_levels: list[float | None] = [None] * n
-    swing_low_levels: list[float | None] = [None] * n
+    #
+    # Optimised: instead of O(swings × bars) nested loops, collect
+    # (confirmation_index, price) pairs, sort by index descending, then do a
+    # single right-to-left scan.  This collapses the level-filling from
+    # quadratic to O(swings·log(swings) + bars).
+    ts_to_idx = {pd.Timestamp(ts): idx for idx, ts in enumerate(timestamps)}
 
+    high_events: list[tuple[int, float]] = []
+    low_events: list[tuple[int, float]] = []
     for swing in swings:
-        conf_idx = _index_of(timestamps, swing.confirmation_timestamp)
+        conf_idx = ts_to_idx.get(pd.Timestamp(swing.confirmation_timestamp))
         if conf_idx is None:
             continue
         if swing.swing_type == SwingType.HIGH:
-            for j in range(conf_idx, n):
-                current = swing_high_levels[j]
-                if current is None or swing.price > current:
-                    swing_high_levels[j] = swing.price
+            high_events.append((conf_idx, swing.price))
         else:
-            for j in range(conf_idx, n):
-                current = swing_low_levels[j]
-                if current is None or swing.price < current:
-                    swing_low_levels[j] = swing.price
+            low_events.append((conf_idx, swing.price))
+
+    # Sort ascending by confirmation index.  A swing confirmed at bar k
+    # applies to all bars >= k (future), so a single left-to-right pass
+    # accumulating the running max high / min low is equivalent to the
+    # original O(swings × bars) nested fill.
+    high_events.sort(key=lambda x: x[0])
+    low_events.sort(key=lambda x: x[0])
+
+    swing_high_levels: list[float | None] = [None] * n
+    swing_low_levels: list[float | None] = [None] * n
+
+    hi_ptr = 0
+    lo_ptr = 0
+    cur_high: float | None = None
+    cur_low: float | None = None
+    for i in range(n):
+        # Activate any swing confirmed exactly at bar i.
+        while hi_ptr < len(high_events) and high_events[hi_ptr][0] == i:
+            val = high_events[hi_ptr][1]
+            if cur_high is None or val > cur_high:
+                cur_high = val
+            hi_ptr += 1
+        while lo_ptr < len(low_events) and low_events[lo_ptr][0] == i:
+            val = low_events[lo_ptr][1]
+            if cur_low is None or val < cur_low:
+                cur_low = val
+            lo_ptr += 1
+        swing_high_levels[i] = cur_high
+        swing_low_levels[i] = cur_low
 
     events: list[BreakEvent] = []
 

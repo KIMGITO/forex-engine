@@ -12,6 +12,7 @@ import pandas as pd
 
 from app.market_structure.models import MarketStructureResult
 from app.regime.models import MarketRegime
+from app._causal_index import available_prefix, build_causal_index
 from app.strategy.config import StrategyConfig
 
 
@@ -32,6 +33,7 @@ class StrategyContext:
         config: StrategyConfig | None = None,
         portfolio: Any = None,
         mtf: Any | None = None,
+        _causal_bundle: dict[str, tuple[list[Any], list[Any]]] | None = None,
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
@@ -45,6 +47,50 @@ class StrategyContext:
         self.config = config or StrategyConfig()
         self._portfolio = portfolio
         self._mtf = mtf
+
+        # Precompute sorted-by-available_from lists and keys once, so per-bar
+        # queries are O(log n) via binary search instead of O(n) full scans.
+        # The scanner/backtester build the index once and share it here via
+        # ``_causal_bundle`` (avoids re-sorting per bar). Direct construction
+        # (tests) falls back to building the index here.
+        if _causal_bundle is not None:
+            self._structure_sorted, self._structure_keys = _causal_bundle["structure"]
+            self._liquidity_sorted, self._liquidity_keys = _causal_bundle["liquidity"]
+            self._sweeps_sorted, self._sweeps_keys = _causal_bundle["sweeps"]
+            self._displacement_sorted, self._displacement_keys = _causal_bundle["displacement"]
+            self._breaks_sorted, self._breaks_keys = _causal_bundle["breaks"]
+            self._ranges_sorted, self._ranges_keys = _causal_bundle["ranges"]
+            self._regime_sorted, self._regime_keys = _causal_bundle["regime"]
+            self._news_sorted, self._news_keys = _causal_bundle["news"]
+        else:
+            self._structure_sorted, self._structure_keys = build_causal_index(
+                structure.structure if structure else []
+            )
+            self._liquidity_sorted, self._liquidity_keys = build_causal_index(
+                structure.liquidity_zones if structure else []
+            )
+            self._sweeps_sorted, self._sweeps_keys = build_causal_index(
+                structure.sweeps if structure else []
+            )
+            self._displacement_sorted, self._displacement_keys = build_causal_index(
+                structure.displacement if structure else []
+            )
+            self._breaks_sorted, self._breaks_keys = build_causal_index(
+                structure.breaks if structure else []
+            )
+            self._ranges_sorted, self._ranges_keys = build_causal_index(
+                structure.ranges if structure else []
+            )
+            self._regime_sorted, self._regime_keys = build_causal_index(
+                regime_observations or []
+            )
+            self._news_sorted, self._news_keys = build_causal_index(
+                news_events or []
+            )
+
+    def _available(self, items: list[Any], keys: list[Any]) -> list[Any]:
+        """Return the causally-available prefix (available_from <= now)."""
+        return available_prefix(items, keys, self.now)
 
     # ── current bar ───────────────────────────────────────────────────────────
 
@@ -72,70 +118,27 @@ class StrategyContext:
 
     def structure_points(self) -> list[Any]:
         """Structure points whose available_from <= now (causal)."""
-        if self._structure is None:
-            return []
-        return [
-            p
-            for p in self._structure.structure
-            if p.available_from is None or p.available_from <= self.now
-        ]
+        return self._available(self._structure_sorted, self._structure_keys)
 
     def liquidity_zones(self) -> list[Any]:
-        if self._structure is None:
-            return []
-        return [
-            z
-            for z in self._structure.liquidity_zones
-            if z.available_from is None or z.available_from <= self.now
-        ]
+        return self._available(self._liquidity_sorted, self._liquidity_keys)
 
     def sweeps(self) -> list[Any]:
-        if self._structure is None:
-            return []
-        return [
-            s
-            for s in self._structure.sweeps
-            if s.available_from is None or s.available_from <= self.now
-        ]
+        return self._available(self._sweeps_sorted, self._sweeps_keys)
 
     def displacement_events(self) -> list[Any]:
-        if self._structure is None:
-            return []
-        return [
-            d
-            for d in self._structure.displacement
-            if d.available_from is None or d.available_from <= self.now
-        ]
+        return self._available(self._displacement_sorted, self._displacement_keys)
 
     def structure_breaks(self) -> list[Any]:
-        if self._structure is None:
-            return []
-        return [
-            b
-            for b in self._structure.breaks
-            if b.available_from is None or b.available_from <= self.now
-        ]
+        return self._available(self._breaks_sorted, self._breaks_keys)
 
     def active_ranges(self) -> list[Any]:
-        if self._structure is None:
-            return []
-        return [
-            r
-            for r in self._structure.ranges
-            if r.available_from is None or r.available_from <= self.now
-        ]
+        return self._available(self._ranges_sorted, self._ranges_keys)
 
     # ── news (available <= now) ───────────────────────────────────────────────
 
     def news_available(self) -> list[Any]:
-        if not self._news_events:
-            return []
-        return [
-            e
-            for e in self._news_events
-            if getattr(e, "available_from", None) is None
-            or e.available_from <= self.now
-        ]
+        return self._available(self._news_sorted, self._news_keys)
 
     def maximum_news_risk(self) -> str | None:
         """Highest active news-risk state among events available at now.
@@ -161,11 +164,7 @@ class StrategyContext:
     # ── regime (available <= now) ─────────────────────────────────────────────
 
     def regime_available(self) -> list[MarketRegime]:
-        if not self._regime_observations:
-            return []
-        return [
-            r for r in self._regime_observations if r.available_from <= self.now
-        ]
+        return self._available(self._regime_sorted, self._regime_keys)
 
     def latest_regime(self) -> MarketRegime | None:
         regs = self.regime_available()

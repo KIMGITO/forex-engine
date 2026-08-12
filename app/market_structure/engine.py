@@ -58,6 +58,7 @@ class MarketStructureEngine:
         data: pd.DataFrame,
         symbol: str,
         timeframe: str,
+        verbose: bool = False,
     ) -> MarketStructureResult:
         """Analyze validated OHLC data and return structured market context.
 
@@ -69,6 +70,8 @@ class MarketStructureEngine:
         symbol, timeframe : str
             Symbol (e.g. EURUSD) and timeframe (e.g. 1h) metadata propagated to
             every event.
+        verbose : bool
+            If True, print progress at each stage.
 
         Returns
         -------
@@ -82,6 +85,8 @@ class MarketStructureEngine:
 
         cfg = self.config
 
+        if verbose:
+            print(f"  [mkt] swings ({len(data)} bars)...", flush=True)
         swings = detect_swings(
             data,
             symbol=symbol,
@@ -89,9 +94,15 @@ class MarketStructureEngine:
             left=cfg.swing_left,
             right=cfg.swing_right,
         )
+        if verbose:
+            print(f"  [mkt] swings: {len(swings)}", flush=True)
 
         structure = build_structure(swings, symbol, timeframe)
+        if verbose:
+            print(f"  [mkt] structure: {len(structure)} pts", flush=True)
 
+        if verbose:
+            print(f"  [mkt] breaks...", flush=True)
         breaks = detect_breaks(
             data,
             swings,
@@ -100,7 +111,11 @@ class MarketStructureEngine:
             confirm_bars=cfg.confirm_bars,
             min_move_pct=cfg.min_move_pct,
         )
+        if verbose:
+            print(f"  [mkt] breaks: {len(breaks)}", flush=True)
 
+        if verbose:
+            print(f"  [mkt] zones ({len(swings)} swings)...", flush=True)
         zones = detect_liquidity_zones(
             swings,
             symbol=symbol,
@@ -108,7 +123,11 @@ class MarketStructureEngine:
             tolerance_pct=cfg.tolerance_pct,
             min_swings=cfg.min_swings,
         )
+        if verbose:
+            print(f"  [mkt] zones: {len(zones)}", flush=True)
 
+        if verbose:
+            print(f"  [mkt] sweeps ({len(data)} bars x {len(zones)} zones)...", flush=True)
         sweeps = detect_sweeps(
             data,
             zones,
@@ -116,7 +135,11 @@ class MarketStructureEngine:
             timeframe=timeframe,
             sweep_bars=cfg.sweep_bars,
         )
+        if verbose:
+            print(f"  [mkt] sweeps: {len(sweeps)}", flush=True)
 
+        if verbose:
+            print(f"  [mkt] displacement...", flush=True)
         displacement = compute_displacement(
             data,
             symbol=symbol,
@@ -126,7 +149,11 @@ class MarketStructureEngine:
             p_large=cfg.p_large,
             p_small=cfg.p_small,
         )
+        if verbose:
+            print(f"  [mkt] displacement: {len(displacement)}", flush=True)
 
+        if verbose:
+            print(f"  [mkt] ranges...", flush=True)
         ranges = detect_ranges(
             data,
             symbol=symbol,
@@ -136,6 +163,8 @@ class MarketStructureEngine:
             range_window=cfg.range_window,
             min_range_bars=cfg.min_range_bars,
         )
+        if verbose:
+            print(f"  [mkt] ranges: {len(ranges)}", flush=True)
 
         return MarketStructureResult(
             symbol=symbol,

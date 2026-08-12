@@ -88,6 +88,13 @@ def compute_displacement(
     events: list[DisplacementEvent] = []
     prev_ratios: list[float] = []
 
+    # Order-statistic Fenwick tree so percentile classification is O(log V)
+    # per bar instead of O(n) per bar (np.nanpercentile on the whole history).
+    # This keeps exact causal semantics (percentiles over all trailing ratios
+    # up to and including the current bar) while making compute_displacement
+    # O(n log V) instead of O(n²).
+    fenwick = _FenwickPercentiles(_RATIO_LO, _RATIO_HI, _RATIO_BINS)
+
     for i in range(n):
         rng = high[i] - low[i]
         if rng < 0:
@@ -113,8 +120,10 @@ def compute_displacement(
 
         # Causal classification using trailing ratios (including current bar).
         if not np.isnan(range_ratio):
-            prev_ratios.append(range_ratio)
-            classification = _classify(range_ratio, prev_ratios, p_extreme, p_large, p_small)
+            fenwick.add(range_ratio)
+            classification = _classify_ordered(
+                range_ratio, fenwick, p_extreme, p_large, p_small
+            )
         else:
             classification = DisplacementClass.NORMAL
 
@@ -135,21 +144,89 @@ def compute_displacement(
     return events
 
 
-def _classify(
+# Binning range for the order-statistic Fenwick tree. range_ratio = range/ATR
+# is centred near 1.0; a generous upper bound with fine resolution keeps the
+# percentile lookup accurate while bounding memory.
+_RATIO_LO = 0.0
+_RATIO_HI = 50.0
+_RATIO_BINS = 200_000
+
+
+class _FenwickPercentiles:
+    """Fenwick tree over binned ratio values for order-statistic queries.
+
+    Supports O(log V) insert and O(log V) percentile lookup. Values below
+    ``lo`` clamp to the first bin; values above ``hi`` clamp to the last bin.
+    """
+
+    __slots__ = ("lo", "width", "n", "tree", "total")
+
+    def __init__(self, lo: float, hi: float, bins: int) -> None:
+        self.lo = lo
+        self.width = (hi - lo) / bins
+        self.n = bins
+        self.tree = [0] * (bins + 1)
+        self.total = 0
+
+    def _bin_index(self, value: float) -> int:
+        idx = int((value - self.lo) / self.width)
+        if idx < 0:
+            idx = 0
+        elif idx >= self.n:
+            idx = self.n - 1
+        return idx + 1  # 1-based for Fenwick
+
+    def add(self, value: float) -> None:
+        i = self._bin_index(value)
+        self.total += 1
+        n = self.n
+        tree = self.tree
+        while i <= n:
+            tree[i] += 1
+            i += i & -i
+
+    def _prefix_sum(self, i: int) -> int:
+        s = 0
+        tree = self.tree
+        while i > 0:
+            s += tree[i]
+            i -= i & -i
+        return s
+
+    def percentile(self, p: float) -> float:
+        """Return the value at percentile ``p`` (0-100) of inserted values."""
+        if self.total == 0:
+            return 0.0
+        target = self.total * p / 100.0
+        # Fenwick binary lifting: find smallest index with prefix_sum >= target.
+        idx = 0
+        bit = 1 << (self.n.bit_length() - 1)
+        while bit:
+            nxt = idx + bit
+            if nxt <= self.n and self.tree[nxt] < target:
+                idx = nxt
+                target -= self.tree[nxt]
+            bit >>= 1
+        idx += 1
+        if idx > self.n:
+            idx = self.n
+        return self.lo + (idx - 1) * self.width
+
+
+def _classify_ordered(
     ratio: float,
-    prev_ratios: list[float],
+    fenwick: _FenwickPercentiles,
     p_extreme: float,
     p_large: float,
     p_small: float,
 ) -> DisplacementClass:
     """Classify a ratio against the trailing distribution (causal)."""
-    arr = np.asarray(prev_ratios, dtype=float)
-    if len(arr) < 2:
+    if fenwick.total < 2:
         return DisplacementClass.NORMAL
 
-    p_lo = np.nanpercentile(arr, p_small)
-    p_hi_large = np.nanpercentile(arr, p_large)
-    p_hi_extreme = np.nanpercentile(arr, p_extreme)
+    p_lo = fenwick.percentile(p_small)
+    p_hi_large = fenwick.percentile(p_large)
+    p_hi_extreme = fenwick.percentile(p_extreme)
 
     if ratio >= p_hi_extreme:
         return DisplacementClass.EXTREME

@@ -1,0 +1,15 @@
+{
+  "symbol": "EURUSD",
+  "timeframe": "H1",
+  "stage": "features",
+  "schema_version": 1,
+  "engine_version": "1.1.0",
+  "source_data_hash": "e1ca7e66fa2286c234ab3607aeea9100941ef4a6deab9991370f2d7feb3e1d86",
+  "first_timestamp": "2026-01-01T00:00:00+00:00",
+  "last_timestamp": "2026-01-17T15:00:00+00:00",
+  "row_count": 400,
+  "config_hash": "9034ecb3e88d9af246f834c83dfbc527e30ba1d44295e0407c55f82e81ee616b",
+  "upstream_hashes": {},
+  "artifact_hash": "8fde3e7ffd37e9d0ac21ee3b31645c19e5e5437a17d023540526a0ed53341ebf",
+  "created_at": "2026-08-12T08:03:07.009385+00:00"
+}

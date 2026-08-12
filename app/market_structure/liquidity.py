@@ -126,6 +126,9 @@ def detect_sweeps(
 
     A wick without a subsequent return, or a move without a prior zone, is
     **not** a sweep.
+
+    Performance note: zones are pre-sorted by ``available_from`` and a cursor
+    advances once per bar, making this O(n + z) instead of O(n × z).
     """
     for col in (high_col, low_col, close_col):
         if col not in data.columns:
@@ -138,17 +141,39 @@ def detect_sweeps(
     timestamps = sorted_data.index.to_numpy()
     n = len(highs)
 
+    # Pre-sort zones by available_from so the cursor works correctly.
+    high_zones_all = sorted(
+        [z for z in zones if z.zone_type == "equal_highs"],
+        key=lambda z: z.available_from,
+    )
+    low_zones_all = sorted(
+        [z for z in zones if z.zone_type == "equal_lows"],
+        key=lambda z: z.available_from,
+    )
+
     events: list[SweepEvent] = []
+    active_highs: list[LiquidityZone] = []
+    active_lows: list[LiquidityZone] = []
+    cursor_high = 0
+    cursor_low = 0
 
     for i in range(n):
         ts = _to_datetime(timestamps[i])
 
-        # High sweeps
-        for zone in zones:
-            if zone.zone_type != "equal_highs":
-                continue
-            if zone.available_from > ts:
-                continue
+        # Advance cursors — add newly‑available zones once per bar.
+        while cursor_high < len(high_zones_all):
+            if high_zones_all[cursor_high].available_from > ts:
+                break
+            active_highs.append(high_zones_all[cursor_high])
+            cursor_high += 1
+        while cursor_low < len(low_zones_all):
+            if low_zones_all[cursor_low].available_from > ts:
+                break
+            active_lows.append(low_zones_all[cursor_low])
+            cursor_low += 1
+
+        # High sweeps — only iterate over active zones.
+        for zone in active_highs:
             if highs[i] <= zone.upper:
                 continue
             for k in range(1, sweep_bars + 1):
@@ -169,12 +194,8 @@ def detect_sweeps(
                     )
                     break
 
-        # Low sweeps
-        for zone in zones:
-            if zone.zone_type != "equal_lows":
-                continue
-            if zone.available_from > ts:
-                continue
+        # Low sweeps — only iterate over active zones.
+        for zone in active_lows:
             if lows[i] >= zone.lower:
                 continue
             for k in range(1, sweep_bars + 1):

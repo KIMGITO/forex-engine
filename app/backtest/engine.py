@@ -47,6 +47,7 @@ from app.backtest.models import (
 from app.backtest.orders import fill_order, intent_to_order
 from app.backtest.portfolio import Portfolio
 from app.market_structure.models import MarketStructureResult
+from app._causal_index import available_prefix, build_causal_index
 
 __all__ = ["BacktestContext", "EventBacktester", "NoOpStrategy", "Strategy"]
 
@@ -104,6 +105,7 @@ class BacktestContext:
         portfolio: Portfolio | None = None,
         now: pd.Timestamp | None = None,
         mtf: Any | None = None,
+        _causal_bundle: dict[str, tuple[list[Any], list[Any]]] | None = None,
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
@@ -117,6 +119,32 @@ class BacktestContext:
         self._portfolio = portfolio
         self._mtf = mtf
         self.now = now if now is not None else frame.index[current_index]
+
+        # Precompute sorted-by-available_from lists and keys once, so per-bar
+        # queries are O(log n) via binary search instead of O(n) full scans.
+        # The backtester builds the index once and shares it here via
+        # ``_causal_bundle`` (avoids re-sorting per bar). Direct construction
+        # (tests) falls back to building the index here.
+        if _causal_bundle is not None:
+            self._structure_sorted, self._structure_keys = _causal_bundle["structure"]
+            self._ranges_sorted, self._ranges_keys = _causal_bundle["ranges"]
+            self._news_sorted, self._news_keys = _causal_bundle["news"]
+            self._regime_sorted, self._regime_keys = _causal_bundle["regime"]
+        else:
+            self._structure_sorted, self._structure_keys = build_causal_index(
+                structure.structure if structure else []
+            )
+            self._ranges_sorted, self._ranges_keys = build_causal_index(
+                structure.ranges if structure else []
+            )
+            self._news_sorted, self._news_keys = build_causal_index(news_events or [])
+            self._regime_sorted, self._regime_keys = build_causal_index(
+                regime_observations or []
+            )
+
+    def _available(self, items: list[Any], keys: list[Any]) -> list[Any]:
+        """Return the causally-available prefix (available_from <= now)."""
+        return available_prefix(items, keys, self.now)
 
     # ── current state (only this bar) ────────────────────────────────────────
 
@@ -152,33 +180,17 @@ class BacktestContext:
         """Structure events with available_from <= now (or all if none set)."""
         if self._structure is None:
             return []
-        out: list[Any] = []
-        for p in self._structure.structure:
-            if p.available_from is None or p.available_from <= self.now:
-                out.append(p)
-        for r in self._structure.ranges:
-            if r.available_from is None or r.available_from <= self.now:
-                out.append(r)
-        return out
+        return self._available(
+            self._structure_sorted, self._structure_keys
+        ) + self._available(self._ranges_sorted, self._ranges_keys)
 
     def news_available(self) -> list[Any]:
         """News/economic events available at or before now."""
-        if not self._news_events:
-            return []
-        return [
-            e
-            for e in self._news_events
-            if getattr(e, "available_from", None) is None
-            or e.available_from <= self.now
-        ]
+        return self._available(self._news_sorted, self._news_keys)
 
     def regime_available(self) -> list[Any]:
         """Regime observations with available_from <= now."""
-        if not self._regime_observations:
-            return []
-        return [
-            r for r in self._regime_observations if r.available_from <= self.now
-        ]
+        return self._available(self._regime_sorted, self._regime_keys)
 
     # ── portfolio (current values only) ──────────────────────────────────────
 
@@ -294,6 +306,20 @@ class EventBacktester:
                 _normalize_backtest_ts(mtf.timestamp): mtf for mtf in mtf_contexts
             }
 
+        # Build the causal index once and share it with every per-bar context,
+        # so we avoid re-sorting the structure/regime/news lists per bar
+        # (would make a full backtest O(n² log n)).
+        causal_bundle = {
+            "structure": build_causal_index(
+                market_structure.structure if market_structure else []
+            ),
+            "ranges": build_causal_index(
+                market_structure.ranges if market_structure else []
+            ),
+            "news": build_causal_index(news_events or []),
+            "regime": build_causal_index(regime_observations or []),
+        }
+
         for i, ts in clock:
             bar = sorted_frame.iloc[i]
             mid = float(bar["close"])
@@ -315,6 +341,7 @@ class EventBacktester:
                     if mtf_by_ts is not None
                     else None
                 ),
+                _causal_bundle=causal_bundle,
             )
 
             # 1. Strategy decisions (causal context only).
