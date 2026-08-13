@@ -17,9 +17,11 @@ def build_causal_index(
     """Return (sorted_items, keys) with None availability first."""
     if not items:
         return [], []
+    # None availability must sort FIRST so _boundary's binary search always
+    # includes it (an item with no availability constraint is always usable).
     pairs = sorted(
         items,
-        key=lambda it: (it.available_from is None, it.available_from),
+        key=lambda it: (it.available_from is not None, it.available_from),
     )
     return pairs, [it.available_from for it in pairs]
 
