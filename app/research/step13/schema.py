@@ -87,13 +87,19 @@ CANDIDATE_FEATURE_COLUMNS = [
 
 # Label columns observed AFTER candidate timestamp.
 CANDIDATE_LABEL_COLUMNS = [
+    "label_entry_price",
+    "label_stop_price",
+    "label_target_price",
+    "label_risk_distance",
+    "label_exit_price",
+    "label_r",
     "label_mfe",
     "label_mae",
     "label_tp_hit",
     "label_sl_hit",
-    "label_excursion_after_bars",
-    "label_future_return",
-    "label_displacement_after",
+    "label_exit_reason",
+    "label_holding_bars",
+    "label_entry_reason",
 ]
 
 # Full candidate event frame columns (features only, no labels).

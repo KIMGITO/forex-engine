@@ -340,7 +340,7 @@ class TestCandidateArtifact:
                 evaluator_stats={},
                 discovery_score={"total": 0.5},
                 sample_count=50,
-                overfit_warnings=["sample small"],
+                overfit_warnings=[],
                 data_hash="a",
                 engine_version="13.2.0",
                 configuration_hash="b",
@@ -350,4 +350,18 @@ class TestCandidateArtifact:
             loaded = load_candidate_artifact(path)
             assert loaded is not None
             assert loaded["candidate_id"] == artifact["candidate_id"]
+            # Clean artifact without warnings stays DISCOVERY_CANDIDATE.
             assert loaded["status"] == "DISCOVERY_CANDIDATE"
+
+            # A warning must produce a truthful DISCOVERY_WARNING status (O1).
+            artifact_warn = build_candidate_artifact(
+                hypothesis=h,
+                evaluator_stats={},
+                discovery_score={"total": 0.8},
+                sample_count=5,
+                overfit_warnings=["sample size 5 < minimum 30"],
+                data_hash="a",
+                engine_version="13.2.0",
+                configuration_hash="b",
+            )
+            assert artifact_warn["status"] == "DISCOVERY_WARNING"

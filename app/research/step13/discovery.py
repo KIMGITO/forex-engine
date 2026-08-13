@@ -170,6 +170,21 @@ def compute_discovery_score(
         ),
     }
 
+    # O1: derive status from warnings. A candidate is DISCOVERY_WARNING if it
+    # has serious overfit indicators, REJECTED if the edge is negative/empty.
+    from app.research.step13b.models import StrategyStatus
+
+    if not r or mean_r <= 0:
+        status = StrategyStatus.REJECTED
+    elif warnings:
+        status = StrategyStatus.PROMISING  # DISCOVERY_WARNING concept
+        if any("no samples" in w or "not statistically significant" in w for w in warnings):
+            status = StrategyStatus.NOT_VALIDATED
+    else:
+        status = StrategyStatus.VALIDATED  # discovery-candidate (clean)
+
+    stats["status"] = status.value
+
     return DiscoveryScore(
         total=total,
         components=components,

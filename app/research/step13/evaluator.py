@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from app.research.step13.execution_model import simulate_hypothesis_outcome
 from app.research.step13.hypotheses import Hypothesis, conditions_pass
 
 
@@ -71,6 +72,8 @@ class FastResearchEvaluator:
         candidate_events: pd.DataFrame,
         candidate_labels: pd.DataFrame | None = None,
         candles: pd.DataFrame | None = None,
+        *,
+        costs: dict[str, float] | None = None,
     ) -> ResearchEvaluatorResult:
         """Evaluate a hypothesis.
 
@@ -93,6 +96,11 @@ class FastResearchEvaluator:
         if qualifying.empty:
             return ResearchEvaluatorResult(hypothesis, 0, [], [], 0, 0, 0)
 
+        costs = costs or {}
+        spread_pips = float(costs.get("spread_pips", 0.0))
+        slippage_pips = float(costs.get("slippage_pips", 0.0))
+        commission_per_lot = float(costs.get("commission_per_lot", 0.0))
+
         # Map candidate_id -> label row for fast lookup.
         label_map: dict[Any, pd.Series] = {}
         if candidate_labels is not None and not candidate_labels.empty:
@@ -107,11 +115,27 @@ class FastResearchEvaluator:
         for _, row in qualifying.iterrows():
             cand_id = row.get("candidate_id")
             direction = str(row.get("direction", ""))
-            r = self._r_for_candidate(row, label_map.get(cand_id), candles)
+            outcome = None
+            if candles is not None and not candles.empty:
+                outcome = simulate_hypothesis_outcome(
+                    hypothesis, row.to_dict(), candles,
+                    spread_pips=spread_pips,
+                    slippage_pips=slippage_pips,
+                    commission_per_lot=commission_per_lot,
+                )
+            r = (
+                outcome["r"]
+                if outcome is not None
+                else self._r_for_candidate(row, label_map.get(cand_id), candles)
+            )
             if r is None:
                 continue
             r_values.append(float(r))
-            bars = self._holding_for_candidate(label_map.get(cand_id))
+            bars = (
+                outcome.get("holding_bars", 0)
+                if outcome is not None
+                else self._holding_for_candidate(label_map.get(cand_id))
+            )
             holding_bars.append(bars)
             if r > 0:
                 win += 1
@@ -178,14 +202,20 @@ class FastResearchEvaluator:
     ) -> float | None:
         """Compute the R-outcome for one candidate.
 
-        Priority: label table (label_mfe / label_mae) → candles fallback.
+        Priority: hypothesis-aware ``label_r`` from the label table, then
+        candles fallback.
         """
         if label_row is not None:
-            mfe = float(label_row.get("label_mfe", 0.0) or 0.0)
-            mae = float(label_row.get("label_mae", 0.0) or 0.0)
-            atr = float(row.get("feature_atr", 0.01) or 0.01)
-            if atr > 0:
-                return round((mfe - mae) / (atr * 2.0), 4)
+            r = label_row.get("label_r")
+            if r is not None:
+                return float(r)
+            # Backward-compat fallback: old label schema approximated from MFE/MAE.
+            mfe = label_row.get("label_mfe")
+            mae = label_row.get("label_mae")
+            if mfe is not None and mae is not None:
+                atr = float(row.get("feature_atr", 0.01) or 0.01)
+                if atr > 0:
+                    return round((float(mfe) - float(mae)) / (atr * 2.0), 4)
         if candles is not None and not candles.empty:
             ts = pd.Timestamp(row.get("timestamp"))
             if ts in candles.index:

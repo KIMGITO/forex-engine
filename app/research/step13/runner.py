@@ -268,10 +268,9 @@ def _run_symbol_timeframe(
         L.info("  --- chunk %d/%d DONE  candidates=%d rss=%.0fMB ---",
                chunk_index + 1, n_chunks, len(candidates), rss_mb())
 
-        # Release chunk + analytical objects.
+        # Release chunk + analytical objects (L1: always cleanup, not verbose-only).
         del chunk, rows, candidates, labels, frames
-        if verbose:
-            gc.collect()
+        gc.collect()
 
     # Merge all valid chunks into per-dataset parquet.
     datasets = [
@@ -287,8 +286,26 @@ def _run_symbol_timeframe(
     # scoring + overfit warnings. Step 13B performs the walk-forward validation.
     from app.research.step13.persist import read_parquet_if_valid
 
+    # Discovery-phase memory guard (M4) BEFORE loading merged candidate data.
+    require_rss_headroom(
+        rss_limit_mb=config.rss_limit_mb,
+        min_mem_available_mb=config.min_mem_available_mb,
+        stage=f"{symbol}/{timeframe} discovery",
+    )
+
     cand_events = read_parquet_if_valid(artifacts.dataset_path("candidate_events"))
     cand_labels = read_parquet_if_valid(artifacts.dataset_path("candidate_labels"))
+
+    # Deduplicate by candidate_id (C4): overlapping chunks must not inflate
+    # the statistical sample.
+    if cand_events is not None and not cand_events.empty and "candidate_id" in cand_events.columns:
+        dedup = cand_events.drop_duplicates(subset=["candidate_id"])
+        if len(dedup) < len(cand_events):
+            L.info("  DISCOVERY: deduplicated %d overlapping candidates",
+                   len(cand_events) - len(dedup))
+        cand_events = dedup
+    if cand_labels is not None and not cand_labels.empty and "candidate_id" in cand_labels.columns:
+        cand_labels = cand_labels.drop_duplicates(subset=["candidate_id"])
 
     n_hypotheses = 0
     n_discovery_candidates = 0
@@ -298,16 +315,34 @@ def _run_symbol_timeframe(
             max_conditions_per_hypothesis=2,
             min_sample_size=config.min_sample_size,
         )
+        # CONTROLLED expanded search (C2): event + condition + entry/stop/exit
+        # combinations, strictly bounded by max_hypotheses.
         hypotheses = generate_hypotheses(
             symbols=(symbol,),
             timeframes=(timeframe,),
+            entry_rules=("immediate", "displacement_confirmation", "retest"),
+            exit_rules=("fixed_rr_1.5", "fixed_rr_2.0", "atr"),
+            structure_biases=("bullish", "bearish"),
+            regimes=("trending", "ranging"),
+            sessions=("europe", "newyork"),
+            htf_alignments=("bullish", "bearish"),
             limits=limits,
         )
         evaluator = FastResearchEvaluator()
+        costs = {
+            "spread_pips": config.spread_pips,
+            "slippage_pips": config.slippage_pips,
+            "commission_per_lot": config.commission_per_lot,
+        }
         scores: dict[str, Any] = {}
 
         for hyp in hypotheses:
-            result = evaluator.evaluate(hyp, cand_events, cand_labels)
+            # C1: the evaluator simulates the hypothesis's actual entry/stop/
+            # exit rules against OHLC with the cost model, so resulting R
+            # corresponds exactly to the recorded hypothesis.
+            result = evaluator.evaluate(
+                hyp, cand_events, cand_labels, base_df, costs=costs
+            )
             n_hypotheses += 1
             if result.sample_count == 0:
                 continue

@@ -210,6 +210,10 @@ class Step13Artifacts:
                 continue
             combined = pd.concat(frames, ignore_index=True)
             combined = _coerce_object_columns(combined)
+            # Chunk-overlap deduplication (C4): the same candidate can appear
+            # in overlapping chunks; MUST NOT inflate the statistical sample.
+            if "candidate_id" in combined.columns:
+                combined = combined.drop_duplicates(subset=["candidate_id"])
             atomic_write_parquet(self.dataset_path(name), combined)
 
         manifest = {

@@ -39,10 +39,17 @@ class Step13Config:
     sweep_displacement_lookback: int = 5
     # Require displacement classification at least this strong (large/extreme).
     min_displacement_class: tuple = ("large", "extreme")
-    # Require HTF alignment when MTF data is available (True = gate).
-    require_htf_alignment: bool = True
+    # HTF alignment is a HYPOTHESIS CONDITION, not a global hard filter.
+    # Default False so the same event population can be compared WITH vs
+    # WITHOUT HTF alignment (discovery architecture).
+    require_htf_alignment: bool = False
     # Max bars after candidate to compute labels (MFE/MAE/TP/SL).
     label_lookback_bars: int = 100
+
+    # ── Trading costs (research model — explicit, config-hashed) ────────────
+    spread_pips: float = 0.8
+    slippage_pips: float = 0.0
+    commission_per_lot: float = 0.0  # account currency per standard lot (100k)
 
     # ── Discovery controls ──────────────────────────────────────────────────
     min_sample_size: int = 30  # minimum events for a discovery candidate
@@ -73,6 +80,9 @@ class Step13Config:
             "min_displacement_class": list(self.min_displacement_class),
             "require_htf_alignment": self.require_htf_alignment,
             "label_lookback_bars": self.label_lookback_bars,
+            "spread_pips": self.spread_pips,
+            "slippage_pips": self.slippage_pips,
+            "commission_per_lot": self.commission_per_lot,
             "min_sample_size": self.min_sample_size,
             "max_hypotheses": self.max_hypotheses,
             "htf_timeframes": list(self.htf_timeframes),

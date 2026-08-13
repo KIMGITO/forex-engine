@@ -4,9 +4,9 @@ A candidate is a potentially meaningful trading setup identified by a
 STRICTLY CAUSAL join of market events:
 
     liquidity sweep
-    + displacement after sweep (lookback)
-    + market structure context
-    + HTF alignment (causal)
+    + displacement after sweep (bounded lookback)
+    + market structure context (bounded)
+    + HTF alignment (ALWAYS a hypothesis condition, never a global hard filter)
     + regime
     + session
 
@@ -25,7 +25,6 @@ import pandas as pd
 from app.research.step13.schema import (
     CANDIDATE_EVENTS_COLUMNS,
     CANDIDATE_ID_COLUMNS,
-    CANDIDATE_LABEL_COLUMNS,
     CANDIDATE_LABELS_COLUMNS,
 )
 
@@ -39,7 +38,12 @@ def _candidate_id(
 
 
 class CandidateGenerator:
-    """Joins sweep/displacement/structure/HTF/regime events causally."""
+    """Joins sweep/displacement/structure/HTF/regime events causally.
+
+    HTF alignment is deliberately NOT a hard filter: it is recorded as
+    ``feature_htf_trend`` on every candidate so hypotheses can compare
+    WITH vs WITHOUT HTF alignment on the same event population.
+    """
 
     def __init__(
         self,
@@ -48,15 +52,13 @@ class CandidateGenerator:
         *,
         sweep_displacement_lookback: int = 5,
         min_displacement_class: tuple = ("large", "extreme"),
-        require_htf_alignment: bool = True,
+        require_htf_alignment: bool = False,
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
         self.sweep_lookback = sweep_displacement_lookback
         self.min_displacement_classes = set(min_displacement_class)
         self.require_htf_alignment = require_htf_alignment
-
-    # ── Public API ───────────────────────────────────────────────────────────
 
     def generate(
         self,
@@ -66,46 +68,42 @@ class CandidateGenerator:
         features: list[dict[str, Any]],
         mtf_rows: list[dict[str, Any]] | None = None,
         structure_rows: list[dict[str, Any]] | None = None,
+        bar_index_map: dict[Any, int] | None = None,
     ) -> list[dict[str, Any]]:
         """Generate candidate rows (feature_* only, strictly causal).
 
-        Parameters
-        ----------
-        sweeps : list of sweep row dicts (each with timestamp/direction)
-        displacements : list of displacement row dicts (timestamp/direction/classification)
-        regimes : list of regime row dicts (timestamp + states)
-        features : list of feature row dicts (timestamp + atr/rsi)
-        mtf_rows : optional list of MTF context rows (timestamp + htf_*)
-        structure_rows : optional list of structure event rows (timestamp + structure_type)
-
-        Returns candidate event rows (feature namespace only).
+        ``bar_index_map`` maps timestamp key -> integer bar index so the
+        displacement lookback is measured in ACTUAL BARS (not event counts).
         """
         if not sweeps:
             return []
 
-        # Build causal indices (sorted by available_from/timestamp).
-        sweep_by_ts = {_ts_key(s["timestamp"]): i for i, s in enumerate(sweeps)}
         disp_sorted = sorted(displacements, key=lambda d: _ts(d["timestamp"]))
-        disp_by_ts = {_ts_key(d["timestamp"]): i for i, d in enumerate(disp_sorted)}
         regime_sorted = sorted(regimes, key=lambda r: _ts(r["timestamp"]))
         feature_sorted = sorted(features, key=lambda f: _ts(f["timestamp"]))
-        mtf_sorted = sorted(mtf_rows, key=lambda m: _ts(m["timestamp"])) if mtf_rows else []
-        struct_sorted = sorted(structure_rows, key=lambda s: _ts(s["timestamp"])) if structure_rows else []
+        mtf_sorted = (
+            sorted(mtf_rows, key=lambda m: _ts(m["timestamp"]))
+            if mtf_rows
+            else []
+        )
+        struct_sorted = (
+            sorted(structure_rows, key=lambda s: _ts(s["timestamp"]))
+            if structure_rows
+            else []
+        )
 
         candidates: list[dict[str, Any]] = []
         for sweep in sweeps:
             sweep_ts = _ts(sweep["timestamp"])
-            sweep_key = _ts_key(sweep["timestamp"])
             direction = sweep.get("direction", "")
 
-            # 1. Find confirming displacement within lookback after sweep.
+            # 1. Find confirming displacement within BAR-based lookback.
             disp = _find_displacement(
                 disp_sorted, sweep_ts, direction, self.sweep_lookback,
-                self.min_displacement_classes,
+                self.min_displacement_classes, bar_index_map=bar_index_map,
             )
             if disp is None:
                 continue
-            disp_ts = _ts(disp["timestamp"])
 
             # 2. Causal regime at candidate timestamp.
             regime = _latest_before(regime_sorted, sweep_ts)
@@ -117,17 +115,13 @@ class CandidateGenerator:
             atr = feats.get("atr", float("nan")) if feats else float("nan")
             rsi = feats.get("rsi", float("nan")) if feats else float("nan")
 
-            # 4. Causal structure bias (bulk of structure rows before sweep).
-            bias = _structure_bias_before(struct_sorted, sweep_ts)
+            # 4. Causal BOUNDED structure bias (last 6 points, immutable).
+            bias = _structure_bias_before(
+                struct_sorted, sweep_ts, lookback_points=6
+            )
 
-            # 5. HTF alignment (causal).
+            # 5. HTF context recorded (never globally hard-filtered).
             htf_alignment, htf_trend, htf_vol = _htf_at(mtf_sorted, sweep_ts)
-            if self.require_htf_alignment and mtf_sorted:
-                # Require at least one aligning HTF tier.
-                if direction == "long" and htf_trend != "bullish":
-                    continue
-                if direction == "short" and htf_trend != "bearish":
-                    continue
 
             # 6. Candidate fields.
             ref_disp = disp.get("available_from") or disp.get("timestamp")
@@ -152,14 +146,17 @@ class CandidateGenerator:
                     "regime": regime.get("market_state", "unknown"),
                     "session": session,
                     "available_from": ref_disp,
-                    # Feature namespace (causal only).
                     "feature_atr": float(atr) if not _is_nan(atr) else None,
                     "feature_rsi": float(rsi) if not _is_nan(rsi) else None,
                     "feature_volatility": regime.get("volatility_state", "unknown"),
                     "feature_structure_bias": bias,
                     "feature_sweep_penetration": float(sweep.get("penetration", 0.0) or 0.0),
                     "feature_sweep_excursion": float(sweep.get("excursion", 0.0) or 0.0),
-                    "feature_displacement_ratio": float(disp.get("range_ratio") or 0.0) if disp.get("range_ratio") is not None else None,
+                    "feature_displacement_ratio": (
+                        float(disp.get("range_ratio") or 0.0)
+                        if disp.get("range_ratio") is not None
+                        else None
+                    ),
                     "feature_htf_alignment": htf_alignment,
                     "feature_htf_trend": htf_trend,
                     "feature_htf_volatility": htf_vol,
@@ -170,7 +167,6 @@ class CandidateGenerator:
 
 
 def candidates_to_frame(candidates: list[dict[str, Any]]) -> pd.DataFrame:
-    """Convert candidate rows to a stable feature-only DataFrame."""
     if not candidates:
         return pd.DataFrame(columns=CANDIDATE_EVENTS_COLUMNS)
     df = pd.DataFrame(candidates)
@@ -181,7 +177,6 @@ def candidates_to_frame(candidates: list[dict[str, Any]]) -> pd.DataFrame:
 
 
 def labels_to_frame(labels: list[dict[str, Any]]) -> pd.DataFrame:
-    """Convert label rows to a stable label-only DataFrame."""
     if not labels:
         return pd.DataFrame(columns=CANDIDATE_LABELS_COLUMNS)
     df = pd.DataFrame(labels)
@@ -212,7 +207,6 @@ def _is_nan(v) -> bool:
 
 
 def _latest_before(rows: list[dict[str, Any]], ts) -> dict[str, Any] | None:
-    """Last row with row.timestamp <= ts (causal prefix semantics)."""
     key = _ts(ts)
     latest = None
     latest_ts = None
@@ -230,17 +224,28 @@ def _find_displacement(
     direction: str,
     lookback_bars: int,
     min_classes: set[str],
+    *,
+    bar_index_map: dict[Any, int] | None = None,
 ):
-    """Find first displacement AFTER sweep with matching direction/class."""
+    """Find first displacement AFTER sweep with matching direction/class.
+
+    ``lookback_bars`` counts ACTUAL BARS between the sweep and the confirming
+    displacement when ``bar_index_map`` (timestamp key -> bar index) is
+    provided. Without a bar map we count displacement events (documented
+    heuristic fallback).
+    """
     sweep_ts = _ts(sweep_ts)
-    count = 0
+    sweep_idx = bar_index_map.get(_ts_key(sweep_ts)) if bar_index_map else None
     for d in displacements:
         d_ts = _ts(d["timestamp"])
         if d_ts <= sweep_ts:
             continue
-        count += 1
-        if count > lookback_bars:
-            break
+        if sweep_idx is not None and bar_index_map is not None:
+            d_idx = bar_index_map.get(_ts_key(d_ts))
+            if d_idx is None:
+                continue
+            if d_idx - sweep_idx > lookback_bars:
+                break
         if d.get("direction", "") != direction:
             continue
         if d.get("classification", "normal") not in min_classes:
@@ -249,20 +254,29 @@ def _find_displacement(
     return None
 
 
-def _structure_bias_before(structure_rows: list[dict[str, Any]], ts) -> str:
-    """Simple bullish/bearish/neutral bias from structure events <= ts."""
+def _structure_bias_before(
+    structure_rows: list[dict[str, Any]],
+    ts,
+    *,
+    lookback_points: int = 6,
+) -> str:
+    """Bounded causal structure bias from the last N structure events
+    strictly at-or-before ``ts``. Future structure events are excluded, so a
+    historical candidate's bias is immutable (causal regression test).
+    """
     key = _ts(ts)
-    bullish = 0
-    bearish = 0
-    for r in structure_rows:
-        r_ts = _ts(r["timestamp"])
-        if r_ts > key:
-            continue
-        t = r.get("structure_type", "")
-        if t in ("higher_high", "higher_low"):
-            bullish += 1
-        elif t in ("lower_high", "lower_low"):
-            bearish += 1
+    prior = sorted(
+        [r for r in structure_rows if _ts(r["timestamp"]) <= key],
+        key=lambda r: _ts(r["timestamp"]),
+    )[-lookback_points:]
+    bullish = sum(
+        1 for r in prior
+        if r.get("structure_type", "") in ("higher_high", "higher_low")
+    )
+    bearish = sum(
+        1 for r in prior
+        if r.get("structure_type", "") in ("lower_high", "lower_low")
+    )
     if bullish > bearish:
         return "bullish"
     if bearish > bullish:

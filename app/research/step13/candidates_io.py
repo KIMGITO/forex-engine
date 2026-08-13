@@ -92,7 +92,7 @@ def build_candidate_artifact(
         "engine_version": engine_version,
         "configuration_hash": configuration_hash,
         "recommended_validation": recommended_validation,
-        "status": "DISCOVERY_CANDIDATE",
+        "status": _status_from_score(discovery_score, overfit_warnings),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -115,3 +115,16 @@ def write_candidate_artifact(
 def load_candidate_artifact(path: str | Path) -> dict[str, Any] | None:
     """Load a research_candidate.json artifact."""
     return read_json_if_valid(Path(path))
+
+def _status_from_score(score: dict, warnings: list[str]) -> str:
+    """Map a discovery score + warnings to a truthful status.
+
+    DISCOVERY_CANDIDATE  — clean positive discovery (no serious warnings).
+    DISCOVERY_WARNING    — serious overfit/small-sample warnings present.
+    REJECTED             — no samples / non-positive expectancy.
+    """
+    if not warnings or not score:
+        return "DISCOVERY_CANDIDATE"
+    if any("no samples" in w or "non-positive" in w for w in warnings):
+        return "REJECTED"
+    return "DISCOVERY_WARNING"
