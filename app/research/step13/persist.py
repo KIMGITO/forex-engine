@@ -19,6 +19,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.research.step13.schema import event_schema_for
+
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,10 +202,21 @@ class Step13Artifacts:
             if "dataset" not in df.columns:
                 continue
             for name, grp in df.groupby("dataset"):
-                if name in accum:
-                    accum[name].append(
-                        grp.drop(columns=["dataset"], errors="ignore")
-                    )
+                if name not in accum:
+                    continue
+                grp = grp.drop(columns=["dataset"], errors="ignore")
+                schema = event_schema_for(name)
+                if schema:
+                    # Project back to the stable per-dataset schema. Without
+                    # this, pd.concat at chunk-write time unions EVERY
+                    # dataset's columns into every group, padding unrelated
+                    # columns with NaN (e.g. OHLC appearing 100% NULL on
+                    # event datasets whose schemas never carry OHLC).
+                    for c in schema:
+                        if c not in grp.columns:
+                            grp[c] = None
+                    grp = grp[schema]
+                accum[name].append(grp)
 
         for name, frames in accum.items():
             if not frames:

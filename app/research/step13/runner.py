@@ -70,10 +70,23 @@ ENGINE_VERSION = "13.2.0"
 
 _NATIVE = {"M15": "15m", "H1": "1h"}
 _SUPPORTED_HTF = {"M15": ("1h", "4h", "1d"), "H1": ("4h", "1d")}
+# Research partitions use provider-style names: H1/H4/D1, NOT native 1h/1d.
+_PARTITION_TF = {"1h": "H1", "4h": "H4", "1d": "D1", "15m": "M15", "1m": "M1"}
 
 
 def _native(tf: str) -> str:
     return _NATIVE.get(tf.upper(), tf.lower())
+
+
+def _partition_tf(tf: str) -> str:
+    """Map a native timeframe (e.g. '1h') to the research partition name (H1).
+
+    ``PartitionedResearchRepository`` stores partitions under provider-style
+    names (EURUSD/H1/data.parquet). Loads using native names like ``1h`` would
+    resolve to ``EURUSD/1H`` — missing on disk — silently disabling HTF
+    context. This mapping prevents that.
+    """
+    return _PARTITION_TF.get(tf.lower(), tf)
 
 
 def _setup_logging(log_file: str | None = None, verbose: bool = True) -> None:
@@ -249,6 +262,61 @@ def _run_symbol_timeframe(
             "candidate_events": candidates_to_frame(candidates),
             "candidate_labels": labels_to_frame(labels),
         }
+
+        # Emission-range dedup (C2): the warm-up overlap (default 200 bars) is
+        # used by every chunk to compute rolling indicators, but each bar/event
+        # must be PERSISTED exactly once — by the chunk that OWNS it.
+        #
+        # Ownership key per dataset:
+        #   - structure_events : available_from (swing confirmation makes it
+        #     later than the event timestamp; filtering by timestamp would
+        #     drop events only detectable once the confirmation bar is in a
+        #     later chunk)
+        #   - mtf_context      : timestamp (the base-bar observation; its
+        #     available_from is the HTF candle close which may precede the
+        #     ownership boundary — filtering by available_from would drop
+        #     boundary rows)
+        #   - all others       : timestamp/available_from are equal (causal),
+        #     either works.
+        #
+        # The first chunk owns bars [0, chunk_size); later chunks own
+        # [chunk_size*i, ...). Overlap bars are therefore not re-emitted,
+        # preventing row inflation in dense datasets (features, regime,
+        # displacement) where a row-identity dedup is impossible because
+        # first/second-chunk feature values legitimately differ (the overlap
+        # is a warm-up prefix, so return_1/atr are NaN there).
+        nominal_start = (warm_start + config.overlap_bars) if chunk_index > 0 else 0
+        lower_ts = base_df.index[min(nominal_start, len(base_df) - 1)]
+        # Exclusive upper bound: the next chunk's nominal start. The final
+        # chunk has no upper bound.
+        if end < len(base_df):
+            upper_ts = base_df.index[end]
+        else:
+            upper_ts = None
+        for fname in (
+            "features", "structure_events", "liquidity_zones",
+            "sweeps", "displacement", "regime", "mtf_context",
+        ):
+            fdf = frames.get(fname)
+            if fdf is None or fdf.empty:
+                continue
+            if fname == "mtf_context" or fname in ("features",):
+                key = "timestamp"
+            else:
+                # structure_events / liquidity_zones / sweeps / displacement /
+                # regime all carry available_from (and for the causal ones it
+                # equals timestamp).
+                key = "available_from" if "available_from" in fdf.columns else "timestamp"
+            if key not in fdf.columns:
+                continue
+            ts_vals = pd.to_datetime(fdf[key])
+            if upper_ts is None:
+                frames[fname] = fdf[ts_vals >= lower_ts]
+            else:
+                frames[fname] = fdf[
+                    (ts_vals >= lower_ts) & (ts_vals < upper_ts)
+                ]
+
         # Feature/label separation enforced.
         validate_candidate_events(frames["candidate_events"])
         validate_candidate_labels(frames["candidate_labels"])
@@ -472,10 +540,12 @@ def run_step13(
                 continue
 
             # Load HTF frames (clipped once to causal window).
+            # FIX: load by the RESEARCH partition name (H1/H4/D1), keep the
+            # dict keyed by NATIVE timeframe (1h/4h/1d) for MtfExtractor.
             htf_frames: dict[str, pd.DataFrame] = {}
             htf_names = _SUPPORTED_HTF.get(tf.upper(), ("1h",))
             for htf_name in htf_names:
-                htf_df = _load_partition(repo, sym, htf_name)
+                htf_df = _load_partition(repo, sym, _partition_tf(htf_name))
                 if htf_df is not None and not htf_df.empty:
                     htf_frames[htf_name] = htf_df
 
@@ -532,3 +602,8 @@ def main() -> None:
         rss_limit_mb=args.rss_limit_mb,
     )
     run_step13(config, resume=args.resume)
+
+
+if __name__ == "__main__":
+    main()
+

@@ -124,8 +124,13 @@ class CandidateGenerator:
             htf_alignment, htf_trend, htf_vol = _htf_at(mtf_sorted, sweep_ts)
 
             # 6. Candidate fields.
+            # entry_ref MUST be a PRICE (the sweep candle's confirmed close) —
+            # labels/execution_model do float(entry_ref) as event_close.
+            # sweep_ref / displacement_ref are IDENTITY references (ISO
+            # timestamps), used for the deterministic candidate_id.
             ref_disp = disp.get("available_from") or disp.get("timestamp")
             ref_sweep = sweep.get("available_from") or sweep.get("timestamp")
+            entry_price = float(sweep.get("close_price") or 0.0) or None
             session = feats.get("session", "") if feats else ""
 
             candidates.append(
@@ -138,14 +143,26 @@ class CandidateGenerator:
                     "symbol": self.symbol,
                     "timeframe": self.timeframe,
                     "direction": direction,
-                    "entry_ref": ref_disp,
-                    "sweep_ref": ref_sweep,
-                    "displacement_ref": ref_disp,
+                    "entry_ref": entry_price,
+                    "sweep_ref": (
+                        ref_sweep.isoformat()
+                        if hasattr(ref_sweep, "isoformat")
+                        else str(ref_sweep)
+                    ),
+                    "displacement_ref": (
+                        ref_disp.isoformat()
+                        if hasattr(ref_disp, "isoformat")
+                        else str(ref_disp)
+                    ),
                     "structure_ref": bias,
                     "htf_ref": htf_trend,
                     "regime": regime.get("market_state", "unknown"),
                     "session": session,
-                    "available_from": ref_disp,
+                    "available_from": (
+                        ref_disp.isoformat()
+                        if hasattr(ref_disp, "isoformat")
+                        else str(ref_disp)
+                    ),
                     "feature_atr": float(atr) if not _is_nan(atr) else None,
                     "feature_rsi": float(rsi) if not _is_nan(rsi) else None,
                     "feature_volatility": regime.get("volatility_state", "unknown"),
@@ -218,6 +235,24 @@ def _latest_before(rows: list[dict[str, Any]], ts) -> dict[str, Any] | None:
     return latest
 
 
+def _direction_key(direction: str) -> str:
+    """Normalize a direction string to the long/short trading axis.
+
+    Sweep rows use ``long`` (low swept, buy) / ``short`` (high swept, sell).
+    Displacement rows use ``up`` / ``down`` (bar movement). Comparing these
+    in their raw forms NEVER matches, which silently kills every candidate.
+
+    Mapping: up -> long, down -> short (a long sweep confirms on an UP
+    displacement; a short sweep confirms on a DOWN displacement).
+    """
+    d = str(direction).lower()
+    if d in ("up", "long"):
+        return "long"
+    if d in ("down", "short"):
+        return "short"
+    return d
+
+
 def _find_displacement(
     displacements: list[dict[str, Any]],
     sweep_ts,
@@ -233,9 +268,13 @@ def _find_displacement(
     displacement when ``bar_index_map`` (timestamp key -> bar index) is
     provided. Without a bar map we count displacement events (documented
     heuristic fallback).
+
+    Direction matching is namespace-normalized via ``_direction_key``: sweep
+    direction is ``long``/``short``; displacement direction is ``up``/``down``.
     """
     sweep_ts = _ts(sweep_ts)
     sweep_idx = bar_index_map.get(_ts_key(sweep_ts)) if bar_index_map else None
+    want = _direction_key(direction)
     for d in displacements:
         d_ts = _ts(d["timestamp"])
         if d_ts <= sweep_ts:
@@ -246,7 +285,7 @@ def _find_displacement(
                 continue
             if d_idx - sweep_idx > lookback_bars:
                 break
-        if d.get("direction", "") != direction:
+        if _direction_key(d.get("direction", "")) != want:
             continue
         if d.get("classification", "normal") not in min_classes:
             continue
