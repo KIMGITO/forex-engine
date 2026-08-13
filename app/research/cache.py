@@ -164,9 +164,34 @@ def deser_regime(data: bytes) -> list[MarketRegime]:
 
 
 def ser_mtf(contexts: list[MtfContext] | None) -> bytes:
+    """Serialize MTF contexts to compact JSON (chunked, memory-safe).
+
+    The previous implementation materialized ``[c.model_dump() for c in
+    contexts]`` followed by a single giant ``json.dumps`` — two full-size
+    copies in RAM simultaneously. For production-scale runs (196K base bars x
+    ~4 tiers) that amplification caused multi-GB peaks and OOM.
+
+    Chunking serializes each batch to an independent JSON array and joins the
+    encoded fragments, so peak memory is bounded by one batch (typically
+    5_000 contexts) instead of the entire result set.
+    """
     if not contexts:
         return b""
-    return json.dumps([c.model_dump() for c in contexts], default=str).encode("utf-8")
+    batch = 5_000
+    if len(contexts) <= batch:
+        # Fast path for small results (identical output layout, compact).
+        return json.dumps(
+            [c.model_dump() for c in contexts],
+            default=str,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    parts: list[bytes] = []
+    for i in range(0, len(contexts), batch):
+        chunk = [c.model_dump() for c in contexts[i : i + batch]]
+        encoded = json.dumps(chunk, default=str, separators=(",", ":"))
+        # Strip the chunk's outer '[' ']' so joining produces ONE flat array.
+        parts.append(encoded[1:-1].encode("utf-8"))
+    return b"[" + b",".join(parts) + b"]"
 
 
 def deser_mtf(data: bytes) -> list[MtfContext] | None:

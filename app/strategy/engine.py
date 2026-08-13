@@ -111,11 +111,18 @@ class HistoricalSignalScanner:
         """
         sorted_data = data.sort_index()
         mtf_by_ts = None
+        mtf_map = None
         if mtf_contexts is not None:
-            mtf_by_ts = {
-                _normalize_ts(mtf.timestamp): mtf
-                for mtf in mtf_contexts
-            }
+            # Memory-bounded streaming map: only one chunk decoded at a time.
+            from app.research.mtf_chunks import MtfContextMap
+
+            if isinstance(mtf_contexts, MtfContextMap):
+                mtf_map = mtf_contexts
+            else:
+                mtf_by_ts = {
+                    _normalize_ts(mtf.timestamp): mtf
+                    for mtf in mtf_contexts
+                }
 
         # Precompute trailing-window features once (causal by construction),
         # then slice per bar. The scanner still only hands the strategy the
@@ -153,7 +160,10 @@ class HistoricalSignalScanner:
 
         signals: list[Signal] = []
         for i, ts in enumerate(sorted_data.index):
-            mtf_ctx = mtf_by_ts.get(_normalize_ts(ts)) if mtf_by_ts is not None else None
+            if mtf_map is not None:
+                mtf_ctx = mtf_map.get(_normalize_ts(ts))
+            else:
+                mtf_ctx = mtf_by_ts.get(_normalize_ts(ts)) if mtf_by_ts is not None else None
             ctx = StrategyContext(
                 symbol=symbol,
                 timeframe=timeframe,

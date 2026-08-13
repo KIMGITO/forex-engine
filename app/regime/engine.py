@@ -20,7 +20,11 @@ from app.news.models import PairRiskContext
 from app.regime.classifier import classify_regime
 from app.regime.config import RegimeConfig
 from app.regime.models import MarketRegime, NewsRiskState
-from app.regime.structure import range_active_series, structure_bias_series
+from app.regime.structure import (
+    build_structure_query_cache,
+    range_active_at,
+    structure_bias_at,
+)
 from app.regime.trend import classify_trend_series
 from app.regime.volatility import classify_volatility_series
 
@@ -68,15 +72,17 @@ class RegimeEngine:
         # Transition-vol ratio: ATR/SMA(ATR) (causal), used to detect expansion.
         vol_ratio_series = _transition_ratio_series(sorted_data, self.config)
 
+        struct_cache = build_structure_query_cache(market_structure)
+
         regimes: list[MarketRegime] = []
         for i, ts in enumerate(sorted_data.index):
             trend = trend_series.iloc[i]
             vol = vol_states.iloc[i]
 
-            struct_bias, struct_count = structure_bias_series(
-                market_structure, self.config, end_ts=ts
+            struct_bias, struct_count = structure_bias_at(
+                struct_cache, self.config.structure_lookback, ts
             )
-            range_active = range_active_series(market_structure, end_ts=ts)
+            range_active = range_active_at(struct_cache, ts)
 
             news_risk = self._news_risk(news_context, ts)
 

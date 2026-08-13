@@ -24,10 +24,10 @@ def build_causal_index(
     return pairs, [it.available_from for it in pairs]
 
 
-def available_prefix(items: list[Any], keys: list[Any], now: Any) -> list[Any]:
-    """Prefix of items whose availability <= now (None always usable)."""
+def _boundary(items: list[Any], keys: list[Any], now: Any) -> int:
+    """Index one past the last item whose availability <= now (None first)."""
     if not items:
-        return []
+        return 0
     lo, hi = 0, len(items)
     while lo < hi:
         mid = (lo + hi) // 2
@@ -35,4 +35,14 @@ def available_prefix(items: list[Any], keys: list[Any], now: Any) -> list[Any]:
             lo = mid + 1
         else:
             hi = mid
-    return items[:lo]
+    return lo
+
+
+def available_prefix(items: list[Any], keys: list[Any], now: Any) -> list[Any]:
+    """Prefix of items whose availability <= now (None always usable)."""
+    return items[:_boundary(items, keys, now)]
+
+
+def available_count(items: list[Any], keys: list[Any], now: Any) -> int:
+    """Number of items whose availability <= now (None always usable)."""
+    return _boundary(items, keys, now)

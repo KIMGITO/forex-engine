@@ -4,17 +4,17 @@
   "stage": "signals",
   "schema_version": 1,
   "engine_version": "1.1.0",
-  "source_data_hash": "e1ca7e66fa2286c234ab3607aeea9100941ef4a6deab9991370f2d7feb3e1d86",
+  "source_data_hash": "e03d5e2bbb377605876f68c5ce1a902c79a037f1734ebc388ee274ab0da1e700",
   "first_timestamp": "2026-01-01T00:00:00+00:00",
   "last_timestamp": "2026-01-17T15:00:00+00:00",
   "row_count": 400,
   "config_hash": "685b4af3b5c4a042206df9f9d4a7bc74c565f698410a7794047f05c82244aeae",
   "upstream_hashes": {
-    "features": "9ea0e0233ae4ec33af993dae99c6d0e6c1467ae81bc90aa77f16ebb2f4e276fe",
+    "features": "e444aad4fb930879a4b48b676a0d5571f4ecb711bd01e3ffd8ec8001c43a9716",
     "structure": "3d0440dab5bcf0aac4a5f224922b07c118ba3fe80ae8d79ea2b87ab03805629a",
-    "regime": "69a222863f9f7032ceb97eed49db4500cc8fa649af27d8db943949b53d4158eb",
-    "mtf": ""
+    "regime": "f311540d5b139dec96e248147b0219164c5f4fde47e3273589bcd57738cccb8f",
+    "mtf": "07b4ddba4ae43bc271b280c52cb43e86b0967cc145e71c8d35d8be0f4a180bf0"
   },
   "artifact_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "created_at": "2026-08-12T10:35:16.126530+00:00"
+  "created_at": "2026-08-13T09:41:42.817359+00:00"
 }

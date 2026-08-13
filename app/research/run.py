@@ -27,7 +27,7 @@ import os
 import sys
 import traceback
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +54,6 @@ from app.research.cache import (
     config_hash,
     data_hash,
     deser_features,
-    deser_mtf,
     deser_regime,
     deser_signals,
     deser_structure,
@@ -66,8 +65,9 @@ from app.research.cache import (
 )
 from app.research.config import ResearchConfig
 from app.research.data_quality import validate_partition
-from app.research.dataset import PartitionedResearchRepository, sync_partition
+from app.research.dataset import PartitionedResearchRepository
 from app.research.models import ResearchReport
+from app.research.mtf_chunks import MtfChunkStore, MtfContextMap
 from app.research.reports import build_research_report
 from app.research.splits import make_time_split, split_frame
 from app.strategy import (
@@ -216,6 +216,8 @@ class ResearchRunConfig:
         }
     )
     walk_train_days: float = 18.0
+    mtf_chunk_size: int = 5000
+    max_rss_mb: int = 5000
     walk_validation_days: float = 5.0
     walk_test_days: float = 5.0
     conservative_cost: dict = field(
@@ -373,24 +375,88 @@ def _compute_mtf(
         return None
 
 
-def _get_mtf(
+def _compute_resolved_mtf(
     cache: ResearchCache,
     dfs_all: dict[str, pd.DataFrame],
     symbol: str,
     timeframe: str,
+    chunk_size: int,
+    rss_limit_mb: float,
+    log=None,
 ):
+    """Memory-bounded MTF stage.
+
+    Uses ``MtfEngine.analyze_chunks`` so only one chunk of contexts is in
+    memory at a time, and persists each chunk via ``MtfChunkStore`` (atomic
+    temp-file writes). On restart, valid chunks are skipped and processing
+    resumes from the first missing chunk.
+
+    Returns a streaming ``MtfContextMap`` over the completed chunk store.
+    """
+    from app.mtf import MtfConfig, MtfEngine
+
+    native_map_raw = {}
+    for tf in _MTF_NATIVE:
+        key = f"{symbol}|{tf}"
+        if key in dfs_all and dfs_all[key] is not None and not dfs_all[key].empty:
+            native_map_raw[_native(tf)] = dfs_all[key]
+
+    native_base = _native(timeframe)
     src_df = dfs_all.get(f"{symbol}|{timeframe}", pd.DataFrame())
-    m, _hit = cache.get_or_compute(
-        symbol,
-        timeframe,
-        "mtf",
-        src_df,
-        {},
-        {"data_hashes": data_hash(src_df)},
-        lambda: _compute_mtf(dfs_all, symbol, timeframe),
-        ser_mtf,
-        deser_mtf,
+    src_hash = data_hash(src_df)
+    cfg_hash = config_hash({})
+    base_df = src_df.sort_index()
+    total = len(base_df)
+
+    store = MtfChunkStore(symbol, timeframe, str(cache.root))
+    store.write_manifest(
+        source_data_hash=src_hash,
+        config_hash=cfg_hash,
+        upstream_hashes={"data_hashes": src_hash},
+        total_bars=total,
+        chunk_size=chunk_size,
     )
+    resume_at = store.first_missing_index()
+    if resume_at > 0 and log:
+        log.info(f"        MTF resume: {resume_at} valid chunk(s) already complete")
+
+    engine = MtfEngine(
+        MtfConfig(base_timeframe=native_base, higher_timeframes=tuple(
+            tf for tf in ("5m", "15m", "1h", "4h", "1d")
+            if tf != native_base and tf in native_map_raw
+        )),
+        symbol,
+    )
+
+    chunks_written = 0
+    for chunk_index, (start, end, contexts) in enumerate(engine.analyze_chunks(
+        {**native_map_raw, native_base: base_df},
+        native_base,
+        chunk_size=chunk_size,
+        rss_limit_mb=rss_limit_mb,
+        clip_htf=True,
+    )):
+        if chunk_index < resume_at:
+            # Already persisted in a previous run; skip (chunks remain valid).
+            continue
+        payload = ser_mtf(contexts)
+        store.write_chunk(
+            chunk_index,
+            start,
+            end,
+            payload,
+            source_data_hash=src_hash,
+            config_hash=cfg_hash,
+        )
+        chunks_written += 1
+        if log:
+            log.info(
+                f"        MTF chunk {chunk_index}: bars={len(contexts)} "
+                f"rss_before={_rss_mb():.0f}MB"
+            )
+        del contexts, payload
+
+    m = MtfContextMap(store)
     return m
 
 
@@ -412,15 +478,21 @@ def _get_signals(
         if strategy_name == "trend_structure"
         else LiquidityReversalStrategy(strat_config)
     )
+    if isinstance(mtf_ctxs, MtfContextMap):
+        mtf_upstream_hash = mtf_ctxs.chunk_set_hash()
+    elif mtf_ctxs:
+        mtf_upstream_hash = data_hash(
+            pd.DataFrame([c.model_dump() for c in mtf_ctxs])
+        )
+    else:
+        mtf_upstream_hash = ""
     upstream = {
         "features": data_hash(features),
         "structure": config_hash(structure),
         "regime": data_hash(pd.DataFrame([r.model_dump() for r in regimes]))
         if regimes
         else "",
-        "mtf": data_hash(pd.DataFrame([c.model_dump() for c in mtf_ctxs]))
-        if mtf_ctxs
-        else "",
+        "mtf": mtf_upstream_hash,
     }
     key = f"_{strategy_name}_{config_hash(strat_config)[:8]}"
 
@@ -505,6 +577,8 @@ def _run_strategy_on_partition(
     cache: ResearchCache,
     state: PipelineState,
     timer: StageTimer | None = None,
+    mtf_chunk_size: int = 5000,
+    max_rss_mb: float = 5000.0,
 ) -> dict:
     native = _native(timeframe)
     bt = BacktestConfig(
@@ -556,7 +630,16 @@ def _run_strategy_on_partition(
     _stage_log(symbol, timeframe, strategy_name, sfx, "mtf", "start")
     _set_state(state, symbol, timeframe, str(StageEnum.MTF), "running")
     if timer: timer.begin("_mtf")
-    mtf_ctxs = _get_mtf(cache, dfs_all, symbol, timeframe) if mtf else None
+    mtf_ctxs = (
+        _compute_resolved_mtf(
+            cache, dfs_all, symbol, timeframe,
+            chunk_size=mtf_chunk_size,
+            rss_limit_mb=float(max_rss_mb),
+            log=log(),
+        )
+        if mtf
+        else None
+    )
     if timer: timer.end("_mtf")
     _stage_log(symbol, timeframe, strategy_name, sfx, "mtf", "end", timer)
     _set_state(state, symbol, timeframe, str(StageEnum.MTF), "complete")
@@ -779,6 +862,8 @@ def run_research_pipeline(
                         StrategyConfig(),
                         run_cfg.baseline_cost, _source_tag,
                         cache, state, timer,
+                        mtf_chunk_size=run_cfg.mtf_chunk_size,
+                        max_rss_mb=float(run_cfg.max_rss_mb),
                     )
                     results.append(r)
                     sym_results.append(r)
@@ -798,6 +883,8 @@ def run_research_pipeline(
                         StrategyConfig(mtf_enabled=True, mtf_min_aligned=1),
                         run_cfg.baseline_cost, _source_tag,
                         cache, state, timer,
+                        mtf_chunk_size=run_cfg.mtf_chunk_size,
+                        max_rss_mb=float(run_cfg.max_rss_mb),
                     )
                     results.append(r_mtf)
                     sym_results.append(r_mtf)
@@ -840,7 +927,12 @@ def run_research_pipeline(
         rep_fe = _get_features(cache, rep, "EURUSD", "H1")
         rep_struct = _get_structure(cache, rep, "EURUSD", "H1")
         rep_regime = _get_regime(cache, rep, "EURUSD", "H1", rep_struct, {})
-        rep_mtf = _get_mtf(cache, dfs_all_eur, "EURUSD", "H1")
+        rep_mtf = _compute_resolved_mtf(
+            cache, dfs_all_eur, "EURUSD", "H1",
+            chunk_size=run_cfg.mtf_chunk_size,
+            rss_limit_mb=float(run_cfg.max_rss_mb),
+            log=L,
+        )
         rep_signals = _get_signals(
             cache, rep, "EURUSD", "H1", "trend_structure", StrategyConfig(),
             rep_fe, rep_struct, rep_regime, rep_mtf,
@@ -1184,6 +1276,14 @@ def main() -> None:
         "--log-file", default="",
         help="persistent log file (default: <output>/run.log)",
     )
+    parser.add_argument(
+        "--mtf-chunk-size", type=int, default=5000,
+        help="MTF chunk size in bars (default 5000; bounded-memory processing)",
+    )
+    parser.add_argument(
+        "--max-rss-mb", type=int, default=5000,
+        help="RSS guard in MB; stops research run if exceeded (default 5000)",
+    )
     args = parser.parse_args()
 
     if args.smoke:
@@ -1202,6 +1302,8 @@ def main() -> None:
         benchmark=args.benchmark,
         resume=args.resume,
         log_file=log_file,
+        mtf_chunk_size=args.mtf_chunk_size,
+        max_rss_mb=args.max_rss_mb,
     )
     run_research_pipeline(run_cfg=run_cfg, output_root=args.output)
 

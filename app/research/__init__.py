@@ -5,6 +5,9 @@ THIS IS A BASELINE ESTABLISHMENT LAYER. It does NOT implement ML/AI, live
 execution, or broker integration. Its purpose is to determine whether
 strategies have a genuine statistical edge using transparent, causal,
 reproducible methodology.
+
+Step 13B (app.research.step13b) is an ALTERNATIVE research path designed for
+bounded-memory, resumable, walk-forward strategy validation.
 """
 
 from app.research.config import ResearchConfig

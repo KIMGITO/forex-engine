@@ -1,0 +1,12 @@
+{
+  "symbol": "EURUSD",
+  "timeframe": "H1",
+  "chunk_index": 0,
+  "start_bar": 0,
+  "end_bar": 300,
+  "row_count": 300,
+  "artifact_hash": "d7a553480d436fc5714eaa7c597610349fb656d6c8e220ca89739a07d840da9e",
+  "source_data_hash": "1f18d005e9777a82fdf31dfc714a073a7748543d4446d1eaf3a963321fc986a0",
+  "config_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "complete": true
+}

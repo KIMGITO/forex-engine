@@ -137,12 +137,8 @@ def latest_completed_candle_open(
         target_open = slot_open - timedelta(minutes=period * step)
         # Find the latest candle whose open <= target_open (i.e. completed
         # by the time target_open+period passed). Because the frame is sorted,
-        # we take the largest open <= target_open.
-        candidates = frame.index[frame.index <= target_open]
-        if len(candidates) == 0:
-            continue
-        # The latest such candle's open is what it was (could be < target_open,
-        # indicating a gap, but it is legally completed since its own period
-        # closed before/at target_open).
-        return _as_utc_ts(candidates[-1])
+        # we take the largest open <= target_open using C-optimized binary search.
+        idx = frame.index.searchsorted(target_open, side='right') - 1
+        if idx >= 0:
+            return _as_utc_ts(frame.index[idx])
     return None

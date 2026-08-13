@@ -4,12 +4,12 @@
   "stage": "features",
   "schema_version": 1,
   "engine_version": "1.1.0",
-  "source_data_hash": "e1ca7e66fa2286c234ab3607aeea9100941ef4a6deab9991370f2d7feb3e1d86",
+  "source_data_hash": "e03d5e2bbb377605876f68c5ce1a902c79a037f1734ebc388ee274ab0da1e700",
   "first_timestamp": "2026-01-01T00:00:00+00:00",
   "last_timestamp": "2026-01-17T15:00:00+00:00",
   "row_count": 400,
   "config_hash": "9034ecb3e88d9af246f834c83dfbc527e30ba1d44295e0407c55f82e81ee616b",
   "upstream_hashes": {},
-  "artifact_hash": "8fde3e7ffd37e9d0ac21ee3b31645c19e5e5437a17d023540526a0ed53341ebf",
-  "created_at": "2026-08-12T10:35:13.751733+00:00"
+  "artifact_hash": "a95675b6b098ae7df72ebb0bce9b33b564246f48642ecd620fa8264bddd7e3ca",
+  "created_at": "2026-08-13T09:41:41.824903+00:00"
 }

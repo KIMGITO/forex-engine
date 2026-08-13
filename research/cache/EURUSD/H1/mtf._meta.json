@@ -4,14 +4,14 @@
   "stage": "mtf",
   "schema_version": 1,
   "engine_version": "1.1.0",
-  "source_data_hash": "e1ca7e66fa2286c234ab3607aeea9100941ef4a6deab9991370f2d7feb3e1d86",
+  "source_data_hash": "e03d5e2bbb377605876f68c5ce1a902c79a037f1734ebc388ee274ab0da1e700",
   "first_timestamp": "2026-01-01T00:00:00+00:00",
   "last_timestamp": "2026-01-17T15:00:00+00:00",
   "row_count": 400,
   "config_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   "upstream_hashes": {
-    "data_hashes": "e1ca7e66fa2286c234ab3607aeea9100941ef4a6deab9991370f2d7feb3e1d86"
+    "data_hashes": "e03d5e2bbb377605876f68c5ce1a902c79a037f1734ebc388ee274ab0da1e700"
   },
   "artifact_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "created_at": "2026-08-12T10:35:15.924780+00:00"
+  "created_at": "2026-08-12T14:04:47.653371+00:00"
 }

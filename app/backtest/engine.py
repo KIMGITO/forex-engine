@@ -300,11 +300,20 @@ class EventBacktester:
         all_orders: list[Order] = []
 
         # Map MTF contexts by observation timestamp for causal per-bar lookup.
+        # Accepts either a plain list (backward compatible) or a memory-bounded
+        # MtfContextMap that pages chunks lazily (production-scale datasets).
         mtf_by_ts = None
+        mtf_map = None
         if mtf_contexts is not None:
-            mtf_by_ts = {
-                _normalize_backtest_ts(mtf.timestamp): mtf for mtf in mtf_contexts
-            }
+            from app.research.mtf_chunks import MtfContextMap
+
+            if isinstance(mtf_contexts, MtfContextMap):
+                mtf_map = mtf_contexts
+            else:
+                mtf_by_ts = {
+                    _normalize_backtest_ts(mtf.timestamp): mtf
+                    for mtf in mtf_contexts
+                }
 
         # Build the causal index once and share it with every per-bar context,
         # so we avoid re-sorting the structure/regime/news lists per bar
@@ -337,9 +346,13 @@ class EventBacktester:
                 portfolio=portfolio,
                 now=ts,
                 mtf=(
-                    mtf_by_ts.get(_normalize_backtest_ts(ts))
-                    if mtf_by_ts is not None
-                    else None
+                    mtf_map.get(_normalize_backtest_ts(ts))
+                    if mtf_map is not None
+                    else (
+                        mtf_by_ts.get(_normalize_backtest_ts(ts))
+                        if mtf_by_ts is not None
+                        else None
+                    )
                 ),
                 _causal_bundle=causal_bundle,
             )

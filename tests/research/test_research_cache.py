@@ -290,7 +290,13 @@ class TestPipelineCache:
         assert (cache_dir / "features.parquet").exists()
         assert (cache_dir / "structure.json").exists()
         assert (cache_dir / "regime.parquet").exists()
-        assert (cache_dir / "mtf.json").exists()
+        # MTF is persisted as a chunked store (atomic chunks + manifest) so
+        # large outputs are never materialized in RAM. Verify the chunked
+        # layout exists and at least one chunk + manifest are valid.
+        mtf_chunk_dir = cache_dir / "mtf"
+        assert (mtf_chunk_dir / "manifest.json").exists()
+        assert any(mtf_chunk_dir.glob("chunk_*.json"))
+        assert any(mtf_chunk_dir.glob("chunk_*._meta.json"))
         # At least two signal artifacts (2 strategies x mtf on/off already
         # share feature/structure/regime/mtf caches from the first run).
         assert res["cache"]["artifact_count"] >= 5

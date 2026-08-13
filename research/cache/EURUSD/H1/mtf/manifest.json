@@ -1,0 +1,13 @@
+{
+  "symbol": "EURUSD",
+  "timeframe": "H1",
+  "total_bars": 400,
+  "chunk_size": 5000,
+  "chunks": 0,
+  "completed_chunks": [],
+  "source_data_hash": "e03d5e2bbb377605876f68c5ce1a902c79a037f1734ebc388ee274ab0da1e700",
+  "config_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "upstream_hashes": {
+    "data_hashes": "e03d5e2bbb377605876f68c5ce1a902c79a037f1734ebc388ee274ab0da1e700"
+  }
+}
