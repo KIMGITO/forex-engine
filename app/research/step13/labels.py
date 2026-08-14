@@ -182,17 +182,22 @@ def compute_labels(
 
         # MFE = maximum FAVORABLE excursion from entry.
         # Long : max(high - entry)   ; Short : max(entry - low).
-        # MAE  = maximum ADVERSE excursion from entry.
-        # Long : max(entry - low)    ; Short : max(high - entry).
-        # Using .min() here would return the most FAVORABLE excursion as the
-        # worst (negative) adverse excursion — the metrics must be .max().
+        # MFE may be negative when price never moves in the favorable
+        # direction (the best excursion was still adverse).
         mfe = float(
             (future_highs - entry).max() if direction > 0
             else (entry - future_lows).max()
         )
-        mae = float(
-            (entry - future_lows).max() if direction > 0
-            else (future_highs - entry).max()
+        # MAE = maximum ADVERSE excursion from entry (ALWAYS NON-NEGATIVE).
+        # Long : max(0, max(entry - low))   ; Short : max(0, max(high - entry)).
+        # A completely favorable trade has MAE = 0 (price never went adverse,
+        # so (entry - low) is negative and must be floored at zero).
+        mae = max(
+            0.0,
+            float(
+                (entry - future_lows).max() if direction > 0
+                else (future_highs - entry).max()
+            ),
         )
 
         out.append(

@@ -154,6 +154,23 @@ def simulate_hypothesis_outcome(
     cost_in_price = pip * (spread_pips + slippage_pips) + commission_per_unit
     r_after_cost = direction * (exit_price - entry) / risk - (cost_in_price / risk)
 
+    # MFE / MAE from the same post-entry window used for the outcome
+    # simulation. MAE is ALWAYS a non-negative adverse excursion:
+    #   long  : max(0, max(entry - low))
+    #   short : max(0, max(high - entry))
+    # A completely favorable trade has MAE = 0.
+    mfe = float(
+        (fut_high - entry).max() if direction > 0
+        else (entry - fut_low).max()
+    )
+    mae = max(
+        0.0,
+        float(
+            (entry - fut_low).max() if direction > 0
+            else (fut_high - entry).max()
+        ),
+    )
+
     return {
         "candidate_id": candidate.get("candidate_id", "unknown"),
         "entry_price": round(entry, 6),
@@ -164,6 +181,8 @@ def simulate_hypothesis_outcome(
         "r": round(r_after_cost, 4),
         "exit_reason": reason,
         "holding_bars": int(holding),
+        "mfe": round(mfe, 6),
+        "mae": round(mae, 6),
     }
 
 
