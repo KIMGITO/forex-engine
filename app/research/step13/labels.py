@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from app.research.step13.execution_model import _resolve_entry_bar
 from app.research.step13.hypotheses import Hypothesis
 from app.research.step13.schema import CANDIDATE_LABELS_COLUMNS
 
@@ -138,8 +139,8 @@ def compute_labels(
 
         # Hypothesis-aware entry.
         entry_rule = hypothesis.entry_rule if hypothesis else "immediate"
-        displacement_close = _find_displacement_close(
-            closes, pos, cand, lookback_bars, direction
+        displacement_close, entry_bar = _resolve_entry_bar(
+            candles, closes, pos, cand, entry_rule, lookback_bars, direction
         )
         entry, _ = _entry_price(entry_rule, event_close, displacement_close)
 
@@ -156,9 +157,14 @@ def compute_labels(
             hypothesis.exit_atr_multiple if hypothesis else 2.0,
         )
 
-        future_highs = highs[pos + 1 : pos + 1 + lookback_bars]
-        future_lows = lows[pos + 1 : pos + 1 + lookback_bars]
-        future_closes = closes[pos + 1 : pos + 1 + lookback_bars]
+        # CAUSALITY: future bars start AFTER the entry bar. For
+        # displacement_confirmation/retest entries, the entry bar is the
+        # confirmation candle; bars between the candidate timestamp and that
+        # confirmation are PRE-ENTRY and must not stop/target the position.
+        start = entry_bar + 1
+        future_highs = highs[start : start + lookback_bars]
+        future_lows = lows[start : start + lookback_bars]
+        future_closes = closes[start : start + lookback_bars]
         if len(future_highs) == 0:
             continue
 
@@ -174,13 +180,19 @@ def compute_labels(
             cost_in_price / risk_distance
         )
 
+        # MFE = maximum FAVORABLE excursion from entry.
+        # Long : max(high - entry)   ; Short : max(entry - low).
+        # MAE  = maximum ADVERSE excursion from entry.
+        # Long : max(entry - low)    ; Short : max(high - entry).
+        # Using .min() here would return the most FAVORABLE excursion as the
+        # worst (negative) adverse excursion — the metrics must be .max().
         mfe = float(
             (future_highs - entry).max() if direction > 0
             else (entry - future_lows).max()
         )
         mae = float(
-            (entry - future_lows).min() if direction > 0
-            else (entry - future_highs).min()
+            (entry - future_lows).max() if direction > 0
+            else (future_highs - entry).max()
         )
 
         out.append(

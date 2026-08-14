@@ -112,8 +112,11 @@ def simulate_hypothesis_outcome(
     atr = float(candidate.get("feature_atr", 0.01) or 0.01)
     event_close = float(candidate.get("entry_ref") or closes[pos])
 
-    displacement_close = _find_displacement_close(
-        closes, pos, candidate, lookback_bars, direction
+    # Resolve the entry bar: for displacement_confirmation/retest this is the
+    # confirmation candle's close; for immediate it is the candidate bar's close.
+    displacement_close, entry_bar = _resolve_entry_bar(
+        candles, closes, pos, candidate, hypothesis.entry_rule,
+        lookback_bars, direction,
     )
     entry = _entry_price(hypothesis.entry_rule, event_close, displacement_close)
 
@@ -126,9 +129,13 @@ def simulate_hypothesis_outcome(
         hypothesis.exit_atr_multiple,
     )
 
-    fut_high = highs[pos + 1 : pos + 1 + lookback_bars]
-    fut_low = lows[pos + 1 : pos + 1 + lookback_bars]
-    fut_close = closes[pos + 1 : pos + 1 + lookback_bars]
+    # CAUSALITY: the future-bar window must start AFTER the entry bar — never
+    # before it. For displacement_confirmation/retest, bars that closed before
+    # the entry price was known must not stop/target the position.
+    start = entry_bar + 1
+    fut_high = highs[start : start + lookback_bars]
+    fut_low = lows[start : start + lookback_bars]
+    fut_close = closes[start : start + lookback_bars]
     if len(fut_high) == 0:
         return None
 
@@ -184,6 +191,56 @@ def _simulate(
     return float(closes[-1]), min(len(highs), max_bars), "time_exit"
 
 
+def _resolve_entry_bar(
+    candles: pd.DataFrame,
+    closes: np.ndarray,
+    pos: int,
+    candidate: dict[str, Any],
+    entry_rule: str,
+    lookback: int,
+    direction: float,
+) -> tuple[float | None, int]:
+    """Resolve (displacement_close, entry_bar_index).
+
+    ``entry_bar`` is the index of the candle whose CLOSE is the entry price:
+      - immediate: the candidate bar itself (``pos``)
+      - displacement_confirmation / retest: the first future bar with a
+        direction-consistent displacement close.
+
+    IMPORTANT: for non-immediate entries, every bar from ``pos+1`` up to the
+    confirmation bar is PRE-ENTRY price action. The outcome simulation must
+    start at ``entry_bar + 1`` — never at ``pos + 1`` — otherwise pre-entry
+    price action can stop/target a position that did not exist yet (a
+    look-ahead violation).
+    """
+    if entry_rule in ("displacement_confirmation", "retest"):
+        # identity ref is an ISO timestamp string — not usable as a price.
+        ref = candidate.get("displacement_ref")
+        if ref is not None and not isinstance(ref, str) or (
+            isinstance(ref, str) and ref.replace(".", "", 1).isdigit()
+        ):
+            try:
+                val = float(ref)
+                # If a numeric displacement close is provided, find its bar by
+                # scanning for the first close that equals it.
+                end = min(pos + 1 + lookback, len(closes))
+                for i in range(pos + 1, end):
+                    if abs(closes[i] - val) < 1e-9:
+                        return val, i
+            except (TypeError, ValueError):
+                pass
+        end = min(pos + 1 + lookback, len(closes))
+        for i in range(pos + 1, end):
+            move = closes[i] - closes[pos]
+            if direction > 0 and move > 0.0:
+                return closes[i], i
+            if direction < 0 and move < 0.0:
+                return closes[i], i
+        # No confirmation found → fall back to immediate at the candidate bar.
+        return closes[pos], pos
+    return closes[pos], pos
+
+
 def _find_displacement_close(
     closes: np.ndarray,
     pos: int,
@@ -191,10 +248,17 @@ def _find_displacement_close(
     lookback: int,
     direction: float,
 ) -> float | None:
+    """Backward-compatible helper returning only the displacement close.
+
+    Delegates to a light-weight scan identical to ``_resolve_entry_bar`` so
+    labels and execution model always agree on the confirmation candle.
+    """
     ref = candidate.get("displacement_ref")
     if ref:
         try:
-            return float(ref)
+            val = float(ref)
+            # Treat as a numeric price if it parses.
+            return val
         except (TypeError, ValueError):
             pass
     end = min(pos + 1 + lookback, len(closes))

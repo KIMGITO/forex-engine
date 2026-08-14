@@ -96,35 +96,48 @@ class CandidateGenerator:
         for sweep in sweeps:
             sweep_ts = _ts(sweep["timestamp"])
             direction = sweep.get("direction", "")
+            sweep_avail = (
+                _ts(sweep["available_from"])
+                if sweep.get("available_from") is not None
+                else sweep_ts
+            )
+            # The effective decision timestamp is the LATER of the sweep bar
+            # and its confirmation (available_from). A sweep is only KNOWABLE
+            # at available_from; using a displacement before that would be a
+            # look-ahead.
+            decision_ts = max(sweep_ts, sweep_avail)
 
             # 1. Find confirming displacement within BAR-based lookback.
+            # The displacement must be at-or-after the sweep's available_from
+            # (confirmation) — otherwise the trade would use displacement info
+            # that preceded the sweep's own confirmation (look-ahead).
             disp = _find_displacement(
-                disp_sorted, sweep_ts, direction, self.sweep_lookback,
+                disp_sorted, sweep, direction, self.sweep_lookback,
                 self.min_displacement_classes, bar_index_map=bar_index_map,
             )
             if disp is None:
                 continue
 
             # 2. Causal regime at candidate timestamp.
-            regime = _latest_before(regime_sorted, sweep_ts)
+            regime = _latest_before(regime_sorted, decision_ts)
             if regime is None:
                 continue
 
             # 3. Causal features at candidate timestamp.
-            feats = _latest_before(feature_sorted, sweep_ts)
+            feats = _latest_before(feature_sorted, decision_ts)
             atr = feats.get("atr", float("nan")) if feats else float("nan")
             rsi = feats.get("rsi", float("nan")) if feats else float("nan")
 
             # 4. Causal BOUNDED structure bias (last 6 points, immutable).
             bias = _structure_bias_before(
-                struct_sorted, sweep_ts, lookback_points=6
+                struct_sorted, decision_ts, lookback_points=6
             )
 
             # 5. HTF context recorded (never globally hard-filtered).
-            htf_alignment, htf_trend, htf_vol = _htf_at(mtf_sorted, sweep_ts)
+            htf_alignment, htf_trend, htf_vol = _htf_at(mtf_sorted, decision_ts)
 
             # 6. Candidate fields.
-            # entry_ref MUST be a PRICE (the sweep candle's confirmed close) —
+            # entry_ref MUST be a PRICE (the sweep's confirmed close) —
             # labels/execution_model do float(entry_ref) as event_close.
             # sweep_ref / displacement_ref are IDENTITY references (ISO
             # timestamps), used for the deterministic candidate_id.
@@ -133,13 +146,21 @@ class CandidateGenerator:
             entry_price = float(sweep.get("close_price") or 0.0) or None
             session = feats.get("session", "") if feats else ""
 
+            # The decision timestamp must be the LATER of:
+            #   1. the sweep's own confirmation (available_from), and
+            #   2. the displacement's availability (available_from).
+            # Using only the sweep confirmation could timestamp the decision
+            # before the confirming displacement became knowable.
+            disp_avail = _ts(disp.get("available_from") or disp.get("timestamp"))
+            effective_decision_ts = max(decision_ts, disp_avail)
+
             candidates.append(
                 {
                     "candidate_id": _candidate_id(
                         self.symbol, self.timeframe, sweep_ts,
                         str(ref_sweep), str(ref_disp),
                     ),
-                    "timestamp": sweep_ts.isoformat(),
+                    "timestamp": effective_decision_ts.isoformat(),
                     "symbol": self.symbol,
                     "timeframe": self.timeframe,
                     "direction": direction,
@@ -255,29 +276,45 @@ def _direction_key(direction: str) -> str:
 
 def _find_displacement(
     displacements: list[dict[str, Any]],
-    sweep_ts,
+    sweep: dict[str, Any],
     direction: str,
     lookback_bars: int,
     min_classes: set[str],
     *,
     bar_index_map: dict[Any, int] | None = None,
 ):
-    """Find first displacement AFTER sweep with matching direction/class.
+    """Find first displacement AFTER the sweep's confirmation with matching
+    direction/class.
 
-    ``lookback_bars`` counts ACTUAL BARS between the sweep and the confirming
-    displacement when ``bar_index_map`` (timestamp key -> bar index) is
-    provided. Without a bar map we count displacement events (documented
-    heuristic fallback).
+    ``sweep`` is the full sweep row dict so its ``available_from``
+    (confirmation) can serve as the earliest permissible decision timestamp.
+
+    ``lookback_bars`` counts ACTUAL BARS between the sweep confirmation and
+    the confirming displacement when ``bar_index_map`` (timestamp key -> bar
+    index) is provided. Without a bar map we count displacement events
+    (documented heuristic fallback).
 
     Direction matching is namespace-normalized via ``_direction_key``: sweep
     direction is ``long``/``short``; displacement direction is ``up``/``down``.
+
+    CAUSALITY: the displacement's timestamp must be >= the sweep's
+    ``available_from``. A sweep's ``timestamp`` is the bar it was detected on,
+    but the sweep is only KNOWABLE at ``available_from`` (swing
+    confirmation). Accepting a displacement before the sweep confirms creates
+    an impossible decision point.
     """
-    sweep_ts = _ts(sweep_ts)
-    sweep_idx = bar_index_map.get(_ts_key(sweep_ts)) if bar_index_map else None
+    sweep_ts = _ts(sweep["timestamp"])
+    sweep_avail = _ts(sweep["available_from"]) if sweep.get("available_from") is not None else sweep_ts
+    effective_ts = max(sweep_ts, sweep_avail)
+    sweep_idx = (
+        bar_index_map.get(_ts_key(effective_ts))
+        if bar_index_map and _ts_key(effective_ts) in bar_index_map
+        else None
+    )
     want = _direction_key(direction)
     for d in displacements:
         d_ts = _ts(d["timestamp"])
-        if d_ts <= sweep_ts:
+        if d_ts < effective_ts:
             continue
         if sweep_idx is not None and bar_index_map is not None:
             d_idx = bar_index_map.get(_ts_key(d_ts))
